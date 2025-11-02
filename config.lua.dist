@@ -519,10 +519,10 @@ logPlayersStatements = false
 
 -- Premium
 -- Comma-separated list of towns treated as free for non-premium players
--- NOTE: "Ab'Dendriel,Carlin,Kazordoon,Thais,Venore,Rookgaard,Dawnport,Dawnport Tutorial,Island of Destiny"
+-- NOTE: "Ab'Dendriel,Carlin,Kazordoon,Thais,Venore,Rookgaard,Dawnport,Dawnport Tutorial,Island of Destiny,Karmia"
 freePremium = false
 freeTownId = 8
-freeTowns = "Ab'Dendriel,Carlin,Kazordoon,Thais,Venore,Rookgaard,Dawnport,Dawnport Tutorial,Island of Destiny"
+freeTowns = "Ab'Dendriel,Carlin,Kazordoon,Thais,Venore,Rookgaard,Dawnport,Dawnport Tutorial,Island of Destiny,Karmia"
 
 -- Chain system
 -- NOTE: combatChainDelay: set to minimum 50 miliseconds
