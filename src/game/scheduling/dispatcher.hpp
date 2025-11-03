@@ -23,7 +23,7 @@
 static constexpr uint16_t DISPATCHER_TASK_EXPIRATION = 2000;
 static constexpr uint16_t SCHEDULER_MINTICKS = 50;
 static constexpr uint16_t NPC_SELL_TICKS = 150;
-static constexpr uint16_t PLAYER_UPDATE_TICKS = 125;
+static constexpr uint16_t PLAYER_UPDATE_TICKS = 1000;
 
 enum class TaskGroup : int8_t {
 	ThreadPool = -1,
