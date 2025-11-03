@@ -11884,8 +11884,6 @@ void Game::updatePlayerEvent(uint32_t playerId) {
 			player->sendSaleItemList(player->getAllSaleItemIdAndCount(inventoryMap));
 		}
 	}
-
-	player->resetScheduledUpdates();
 }
 
 bool Game::hasPartyMembersNearby(const std::shared_ptr<Player> &player) {

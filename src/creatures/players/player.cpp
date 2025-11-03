@@ -2487,11 +2487,13 @@ void Player::sendCyclopediaHouseList(const HouseMap &houses) const {
 		client->sendCyclopediaHouseList(houses);
 	}
 }
+
 void Player::sendResourceBalance(Resource_t resourceType, uint64_t value) const {
 	if (client) {
 		client->sendResourceBalance(resourceType, value);
 	}
 }
+
 void Player::sendHouseAuctionMessage(uint32_t houseId, HouseAuctionType type, uint8_t index, bool bidSuccess /* = false*/) const {
 	if (client) {
 		client->sendHouseAuctionMessage(houseId, type, index, bidSuccess);
@@ -2621,12 +2623,7 @@ void Player::onApplyImbuement(const Imbuement* imbuement, const std::shared_ptr<
 		openImbuementWindow(IMBUEMENT_WINDOW_SCROLL, item);
 	}
 
-	if (!item->addImbuement(slot, imbuement->getID(), baseImbuement->duration)) {
-		g_logger().error("[Player::onApplyImbuement] - An error occurred while player with name {} trying to apply imbuement in a different item than the opened in the window, probably trying to abuse bug", this->getName());
-		return;
-	}
-
-	addScheduledUpdates(PlayerUpdate_Skills);
+	addScheduledUpdates((PlayerUpdate_Stats | PlayerUpdate_Skills));
 }
 
 void Player::onClearImbuement(const std::shared_ptr<Item> &item, uint8_t slot) {
@@ -6037,10 +6034,8 @@ void Player::updateSaleShopList() {
 }
 
 void Player::updateState() {
-	updateInventoryWeight();
-	updateItemsLight();
-	sendInventoryIds();
-	sendStats();
+	addScheduledUpdates((PlayerUpdate_Weight | PlayerUpdate_Light | PlayerUpdate_Stats));
+	addScheduledUpdates(PlayerUpdate_Inventory);
 	if (shopOwner) {
 		updateSaleShopList();
 	}
@@ -8525,6 +8520,9 @@ void Player::onThink(uint32_t interval) {
 
 	// Wheel of destiny major spells
 	wheel()->onThink();
+
+	scheduledUpdates = 0;
+	scheduledUpdate = false;
 
 	g_callbacks().executeCallback(EventCallback_t::playerOnThink, &EventCallback::playerOnThink, getPlayer(), interval);
 }
@@ -12118,7 +12116,7 @@ void Player::addScheduledUpdates(uint32_t flags) {
 		g_dispatcher().addEvent(
 			[playerId = getID()]() { g_game().updatePlayerEvent(playerId); },
 			__FUNCTION__,
-			SCHEDULER_MINTICKS
+			PLAYER_UPDATE_TICKS // [2025-02-11 23:04:18.388] [info] The task 'Player::addScheduledUpdates' has expired, it has not been executed in 50.
 		);
 
 		scheduledUpdate = true;
@@ -12127,11 +12125,6 @@ void Player::addScheduledUpdates(uint32_t flags) {
 
 bool Player::hasScheduledUpdates(uint32_t flags) const {
 	return (scheduledUpdates & flags);
-}
-
-void Player::resetScheduledUpdates() {
-	scheduledUpdates = 0;
-	scheduledUpdate = false;
 }
 
 void Player::sendHarmonyProtocol() const {
@@ -12177,7 +12170,7 @@ void Player::setSerene(const bool isSerene) {
 	sendSereneProtocol();
 
 	if (getVirtue() == VIRTUE_JUSTICE) {
-		sendSkills();
+		addScheduledUpdates(PlayerUpdate_Skills);
 	}
 }
 
@@ -12219,7 +12212,7 @@ void Player::setVirtue(const VirtueMonk_t virtueEnum) {
 	sendVirtueProtocol();
 
 	if (m_virtue != VIRTUE_NONE) {
-		sendSkills();
+		addScheduledUpdates(PlayerUpdate_Skills);
 	}
 }
 
@@ -12649,8 +12642,7 @@ void Player::applyEquippedWeaponProficiency(const uint16_t itemId) {
 		}
 	}
 
-	sendStats();
-	sendSkills();
+	addScheduledUpdates((PlayerUpdate_Stats | PlayerUpdate_Skills));
 }
 
 void Player::removeEquippedWeaponProficiency(const uint16_t itemId) {
@@ -12668,6 +12660,5 @@ void Player::removeEquippedWeaponProficiency(const uint16_t itemId) {
 
 	equippedWeaponProficiency.reset();
 
-	sendStats();
-	sendSkills();
+	addScheduledUpdates((PlayerUpdate_Stats | PlayerUpdate_Skills));
 }

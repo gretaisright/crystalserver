@@ -1154,7 +1154,6 @@ public:
 
 	void addScheduledUpdates(uint32_t flags);
 	bool hasScheduledUpdates(uint32_t flags) const;
-	void resetScheduledUpdates();
 
 	void updateRegeneration() const;
 
