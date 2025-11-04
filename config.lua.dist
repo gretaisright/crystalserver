@@ -520,6 +520,8 @@ logPlayersStatements = false
 -- Premium
 -- Comma-separated list of towns treated as free for non-premium players
 -- NOTE: "Ab'Dendriel,Carlin,Kazordoon,Thais,Venore,Rookgaard,Dawnport,Dawnport Tutorial,Island of Destiny,Karmia"
+-- NOTE: freePremium: set to true to give all players premium status
+-- NOTE: freeTownName: set the town name where non-premium players will be teleported when trying to login in premium areas
 freePremium = false
 freeTownName = "Thais"
 freeTowns = "Ab'Dendriel,Carlin,Kazordoon,Thais,Venore,Rookgaard,Dawnport,Dawnport Tutorial,Island of Destiny,Karmia"
