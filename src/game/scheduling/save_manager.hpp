@@ -49,7 +49,7 @@ private:
 
 	std::atomic<std::chrono::steady_clock::time_point> m_scheduledAt;
 
-	std::atomic<bool> m_serverSaving{false};
+	std::atomic<bool> m_serverSaving { false };
 	phmap::parallel_flat_hash_map<uint32_t, std::chrono::steady_clock::time_point> m_playerMap;
 
 	ThreadPool &threadPool;
