@@ -12113,10 +12113,10 @@ void Player::addScheduledUpdates(uint32_t flags) {
 	scheduledUpdates |= flags;
 
 	if (shouldSchedule) {
-		g_dispatcher().addEvent(
+		g_dispatcher().scheduleEvent(
+			SCHEDULER_MINTICKS,
 			[playerId = getID()]() { g_game().updatePlayerEvent(playerId); },
-			__FUNCTION__,
-			PLAYER_UPDATE_TICKS
+			__FUNCTION__
 		);
 
 		scheduledUpdate = true;
