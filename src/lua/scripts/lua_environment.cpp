@@ -161,7 +161,20 @@ void LuaEnvironment::executeTimerEvent(uint32_t eventIndex) {
 		ScriptEnvironment* env = getScriptEnv();
 		env->setTimerEvent();
 		env->setScriptId(timerEventDesc.scriptId, this);
+#ifdef STATS_ENABLED
+		if (g_configManager().getBoolean(STATS_TRACK_LUA_ADD_EVENTS_HASHES)) {
+			env->setEventTag(getAddEventStackTracebackHash(timerEventDesc.stackTraceback));
+		} else {
+			if (!timerEventDesc.scriptName.empty()) {
+				env->setEventTag(timerEventDesc.scriptName);
+			} else {
+				env->setEventTag("LuaAddEvent");
+			}
+		}
+#endif
+
 		callFunction(timerEventDesc.parameters.size());
+
 #ifdef STATS_ENABLED
 		uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - time_point).count();
 		if (g_configManager().getBoolean(STATS_TRACK_LUA_ADD_EVENTS)) {

@@ -125,7 +125,24 @@ int Lua::protectedCall(lua_State* L, int nargs, int nresults) {
 #ifdef STATS_ENABLED
 	uint64_t ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - time_point).count();
 	if (scriptInterface) {
-		g_stats().addLuaStats(new Stat(ns, scriptInterface->getFileById(scriptId), ""));
+		std::string label;
+		if (scriptId == EVENT_ID_LOADING) {
+			label = scriptInterface->getLoadingFile();
+		} else if (scriptId == EVENT_ID_USER) {
+			label = "user";
+		} else if (scriptId == 0) {
+			label = timerEvent ? std::string("LuaAddEvent") : scriptInterface->getInterfaceName();
+		} else {
+			label = scriptInterface->getFileById(scriptId);
+			if (label == "(Unknown scriptfile)") {
+				label = timerEvent ? std::string("LuaAddEvent") : scriptInterface->getInterfaceName();
+			}
+		}
+
+		for (auto &ch : label) {
+			if (ch == '\\') ch = '/';
+		}
+		g_stats().addLuaStats(new Stat(ns, label, ""));
 	}
 #endif
 

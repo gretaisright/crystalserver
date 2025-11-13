@@ -33,6 +33,7 @@ void ScriptEnvironment::resetEnv() {
 	scriptId = 0;
 	callbackId = 0;
 	timerEvent = false;
+	eventTag.clear();
 	interface = nullptr;
 	localMap.clear();
 	tempResults.clear();

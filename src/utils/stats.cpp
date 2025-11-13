@@ -20,6 +20,7 @@
 #include "utils/tools.hpp"
 
 #include <fstream>
+#include <filesystem>
 
 int64_t Stats::DUMP_INTERVAL = 30000;
 uint32_t Stats::SLOW_EXECUTION_TIME = 10000000;
@@ -144,6 +145,9 @@ void Stats::parseSpecialQueue(std::forward_list<Stat*> &queue) {
 }
 
 void Stats::writeSlowInfo(const std::string &file, uint64_t executionTime, const std::string &description, const std::string &extraDescription) {
+	std::error_code ec;
+	std::filesystem::create_directories("stats", ec);
+
 	std::ofstream out(std::string("stats/") + file, std::ofstream::out | std::ofstream::app);
 	if (!out.is_open()) {
 		std::clog << "Can't open " << std::string("stats/") + file << " (check if directory exists)" << std::endl;
@@ -160,11 +164,15 @@ void Stats::writeStats(const std::string &file, const statsMap &stats, const std
 		return;
 	}
 
+	std::error_code ec;
+	std::filesystem::create_directories("stats", ec);
+
 	std::ofstream out(std::string("stats/") + file, std::ofstream::out | std::ofstream::app);
 	if (!out.is_open()) {
 		std::clog << "Can't open " << std::string("stats/") + file << " (check if directory exists)" << std::endl;
 		return;
 	}
+
 	if (stats.empty()) {
 		out.close();
 		return;
@@ -182,19 +190,21 @@ void Stats::writeStats(const std::string &file, const statsMap &stats, const std
 
 	out << extraInfo;
 	float total_time = 0;
-	out << std::setw(10) << "Time (ms)" << std::setw(10) << "Calls" << std::setw(15) << "Rel usage "
+	out << std::setw(10) << "Time (ms)" << std::setw(10) << "Calls" << std::setw(15) << "Rel CPU usage "
 		<< "%"
-		<< std::setw(15) << "Real usage "
+		<< std::setw(15) << "Abs CPU usage "
 		<< "%"
 		<< " "
 		<< "Description"
 		<< "\n";
+
 	for (auto &it : pairs) {
 		total_time += it.second.executionTime;
 	}
+
 	for (auto &it : pairs) {
-		float percent = 100 * static_cast<float>(it.second.executionTime) / total_time;
-		float realPercent = static_cast<float>(it.second.executionTime) / (static_cast<float>(DUMP_INTERVAL) * 10000.);
+		float percent = 100.0f * static_cast<float>(it.second.executionTime) / total_time;
+		float realPercent = static_cast<float>(it.second.executionTime) / (static_cast<float>(DUMP_INTERVAL) * 1000000.0f) * 100.0f;
 		if (percent > 0.1) {
 			out << std::setw(10) << it.second.executionTime / 1000000 << std::setw(10) << it.second.calls
 				<< std::setw(15) << std::setprecision(5) << std::fixed << percent << "%" << std::setw(15)

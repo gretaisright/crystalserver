@@ -58,6 +58,13 @@ public:
 		timerEvent = true;
 	}
 
+	void setEventTag(const std::string &tag) {
+		eventTag = tag;
+	}
+	const std::string &getEventTag() const {
+		return eventTag;
+	}
+
 	void getEventInfo(int32_t &scriptId, LuaScriptInterface*&scriptInterface, int32_t &callbackId, bool &timerEvent) const;
 
 	void addTempItem(const std::shared_ptr<Item> &item);
@@ -101,6 +108,8 @@ private:
 	int32_t scriptId {};
 	int32_t callbackId {};
 	bool timerEvent {};
+
+	std::string eventTag;
 
 	// result map
 	static uint32_t lastResultId;
