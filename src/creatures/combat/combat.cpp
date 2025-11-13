@@ -38,6 +38,7 @@
 #include "lua/creature/events.hpp"
 #include "map/spectators.hpp"
 #include "creatures/players/player.hpp"
+#include "utils/tools.hpp"
 
 int32_t Combat::getLevelFormula(const std::shared_ptr<Player> &player, const std::shared_ptr<Spell> &wheelSpell, const CombatDamage &damage) const {
 	if (!player) {
@@ -56,6 +57,47 @@ int32_t Combat::getLevelFormula(const std::shared_ptr<Player> &player, const std
 
 	int32_t levelFormula = player->getLevel() * 2 + (player->getMagicLevel() + player->getSpecializedMagicLevel(damage.primary.type, true)) * 3;
 	return levelFormula;
+}
+
+static void applyImproveMonkAttackSpender(const std::shared_ptr<Player> &player, CombatDamage &damage) {
+	if (!player) {
+		return;
+	}
+
+	if (damage.instantSpellName.empty()) {
+		return;
+	}
+
+	const std::string &spellName = damage.instantSpellName;
+	if (harmonySpells.find(spellName) == harmonySpells.end()) {
+		return;
+	}
+
+	const uint8_t harmonyPoints = player->getHarmony();
+	if (harmonyPoints <= 0 || harmonyPoints > 5) {
+		return;
+	}
+
+	uint8_t baseHarmonyBonusPercent = 8; // 8, 16, 32, 64, 128
+
+	if (player->getVirtue() == VIRTUE_HARMONY) {
+		baseHarmonyBonusPercent += (player->isSerene() ? 8 : 4);
+	}
+
+	const uint8_t stage = player->wheel()->getStage(WheelStage_t::ASCETIC);
+	if (stage >= 3) {
+		baseHarmonyBonusPercent += 3;
+	} else if (stage >= 2) {
+		baseHarmonyBonusPercent += 2;
+	} else if (stage >= 1) {
+		baseHarmonyBonusPercent += 1;
+	}
+
+	const int32_t totalBonusPercent = static_cast<int32_t>(baseHarmonyBonusPercent * (1 << (harmonyPoints - 1)));
+
+	const float multiplier = 1.0f + (totalBonusPercent / 100.0f);
+	damage.primary.value = static_cast<int32_t>(damage.primary.value * multiplier);
+	damage.secondary.value = static_cast<int32_t>(damage.secondary.value * multiplier);
 }
 
 CombatDamage Combat::getCombatDamage(const std::shared_ptr<Creature> &creature, const std::shared_ptr<Creature> &target) const {
@@ -115,6 +157,11 @@ CombatDamage Combat::getCombatDamage(const std::shared_ptr<Creature> &creature, 
 				}
 			}
 		}
+
+		if (attackerPlayer) {
+			applyImproveMonkAttackSpender(attackerPlayer, damage);
+		}
+
 		if (attackerPlayer && wheelSpell && wheelSpell->isInstant()) {
 			wheelSpell->getCombatDataAugment(attackerPlayer, damage);
 		}
@@ -152,6 +199,9 @@ CombatType_t Combat::ConditionToDamageType(ConditionType_t type) {
 		case CONDITION_POISON:
 			return COMBAT_EARTHDAMAGE;
 
+		case CONDITION_AGONY:
+			return COMBAT_AGONYDAMAGE;
+
 		case CONDITION_FREEZING:
 			return COMBAT_ICEDAMAGE;
 
@@ -181,6 +231,9 @@ ConditionType_t Combat::DamageToConditionType(CombatType_t type) {
 
 		case COMBAT_EARTHDAMAGE:
 			return CONDITION_POISON;
+
+		case CONDITION_AGONY:
+			return CONDITION_AGONY;
 
 		case COMBAT_ICEDAMAGE:
 			return CONDITION_FREEZING;
@@ -655,6 +708,98 @@ void Combat::CombatHealthFunc(const std::shared_ptr<Creature> &caster, const std
 
 		damage.damageMultiplier += attackerPlayer->wheel()->getMajorStatConditional("Divine Empowerment", WheelMajor_t::DAMAGE);
 		g_logger().trace("Wheel Divine Empowerment damage multiplier {}", damage.damageMultiplier);
+
+		auto &proficiencyPerk = attackerPlayer->getEquippedWeaponProficiency();
+
+		// Proficiency Perk: skillPercentageAsExtraDamageForAutoAttack
+		if (const std::shared_ptr<Creature> &attackedCreature = attackerPlayer->getAttackedCreature()) {
+			if (attackedCreature && (attackedCreature == targetMonster || attackedCreature == targetPlayer)) {
+				for (const auto &[skillType, bonusPercent] : proficiencyPerk.skillPercentageAsExtraDamageForAutoAttack) {
+					const uint16_t skillLevel = attackerPlayer->getSkillLevel(skillType);
+					const int32_t bonus = static_cast<int32_t>(std::ceil(skillLevel * bonusPercent));
+
+					g_logger().debug("[{}] skillPercentageAsExtraDamageForAutoAttack before {} / {} bonus {} skill id {}", __FUNCTION__, damage.primary.value, damage.secondary.value, bonus, static_cast<uint8_t>(skillType));
+
+					if (damage.primary.value > 0) {
+						damage.primary.value -= bonus;
+					}
+
+					if (damage.secondary.value > 0) {
+						damage.secondary.value -= bonus;
+					}
+
+					g_logger().debug("[{}] skillPercentageAsExtraDamageForAutoAttack after {} / {} bonus {} skill id {}", __FUNCTION__, damage.primary.value, damage.secondary.value, bonus, static_cast<uint8_t>(skillType));
+				}
+			}
+		}
+
+		if (!damage.instantSpellName.empty()) {
+			// Helper: use magic level when requested by perk
+			auto getProficiencyStatLevel = [&](skills_t skillType) -> uint32_t {
+				if (skillType == SKILL_MAGLEVEL) {
+					return attackerPlayer->getMagicLevel();
+				}
+				return attackerPlayer->getSkillLevel(skillType);
+			};
+
+			// Proficiency Perk: skillPercentageAsExtraHealingForSpells
+			if (damage.primary.type == COMBAT_HEALING) {
+				for (const auto &[skillType, bonusPercent] : proficiencyPerk.skillPercentageAsExtraHealingForSpells) {
+					const uint32_t statLevel = getProficiencyStatLevel(skillType);
+					const int32_t bonus = static_cast<int32_t>(std::ceil(statLevel * bonusPercent));
+
+					g_logger().debug("[{}] skillPercentageAsExtraHealingForSpells before {} / bonus {} skill id {}", __FUNCTION__, damage.primary.value, bonus, static_cast<uint8_t>(skillType));
+
+					if (damage.primary.value > 0) {
+						damage.primary.value += bonus;
+					}
+
+					g_logger().debug("[{}] skillPercentageAsExtraHealingForSpells after {} / bonus {} skill id {}", __FUNCTION__, damage.primary.value, bonus, static_cast<uint8_t>(skillType));
+				}
+			}
+
+			// Proficiency Perk: skillPercentageAsExtraDamageForSpells
+			if (damage.primary.type != COMBAT_HEALING) {
+				for (const auto &[skillType, bonusPercent] : proficiencyPerk.skillPercentageAsExtraDamageForSpells) {
+					const uint32_t statLevel = getProficiencyStatLevel(skillType);
+					const int32_t bonus = static_cast<int32_t>(std::ceil(statLevel * bonusPercent));
+
+					g_logger().debug("[{}] skillPercentageAsExtraDamageForSpells before {} / {} bonus {} skill id {}", __FUNCTION__, damage.primary.value, damage.secondary.value, bonus, static_cast<uint8_t>(skillType));
+
+					if (damage.primary.value < 0) {
+						damage.primary.value -= bonus;
+					}
+
+					if (damage.secondary.value < 0) {
+						damage.secondary.value -= bonus;
+					}
+
+					g_logger().debug("[{}] skillPercentageAsExtraDamageForSpells after {} / {} bonus {} skill id {}", __FUNCTION__, damage.primary.value, damage.secondary.value, bonus, static_cast<uint8_t>(skillType));
+				}
+			}
+		}
+
+		// Proficiency Perk: lifeGainOnHit
+		const uint8_t addLifeGainOnHit = proficiencyPerk.lifeGainOnHit;
+		if (addLifeGainOnHit > 0) {
+			CombatDamage proficiencyLifeOnHit;
+			proficiencyLifeOnHit.primary.value = addLifeGainOnHit;
+			proficiencyLifeOnHit.primary.type = COMBAT_HEALING;
+			g_game().combatChangeHealth(nullptr, attackerPlayer, proficiencyLifeOnHit);
+
+			g_logger().debug("[{}] addLifeGainOnHit {}", __FUNCTION__, addLifeGainOnHit);
+		}
+
+		// Proficiency Perk: manaGainOnHit
+		const uint8_t addManaGainOnHit = proficiencyPerk.manaGainOnHit;
+		if (addManaGainOnHit > 0) {
+			CombatDamage proficiencyManaOnHit;
+			proficiencyManaOnHit.primary.value = addManaGainOnHit;
+			proficiencyManaOnHit.origin = ORIGIN_NONE;
+			g_game().combatChangeMana(nullptr, attackerPlayer, proficiencyManaOnHit);
+
+			g_logger().debug("[{}] addManaGainOnHit {}", __FUNCTION__, addManaGainOnHit);
+		}
 	}
 
 	if (g_game().combatBlockHit(damage, caster, target, params.blockedByShield, params.blockedByArmor, params.itemId != 0)) {
@@ -671,6 +816,9 @@ void Combat::CombatHealthFunc(const std::shared_ptr<Creature> &caster, const std
 
 		// Monster type onPlayerAttack event
 		targetMonster->onAttackedByPlayer(attackerPlayer);
+
+		const auto &item = attackerPlayer->getWeapon();
+		damage = applyWeaponProficiencyDamage(attackerPlayer, item, targetMonster, damage);
 	}
 
 	// Monster attacking player
@@ -680,6 +828,10 @@ void Combat::CombatHealthFunc(const std::shared_ptr<Creature> &caster, const std
 			damage.primary.value -= static_cast<int32_t>(std::ceil((damage.primary.value * slot->bonusPercentage) / 100));
 			damage.secondary.value -= static_cast<int32_t>(std::ceil((damage.secondary.value * slot->bonusPercentage) / 100));
 		}
+	}
+
+	if (!target || !target->isAlive()) {
+		return;
 	}
 
 	if (g_game().combatChangeHealth(caster, target, damage)) {
@@ -968,6 +1120,24 @@ void Combat::combatTileEffects(const CreatureVector &spectators, const std::shar
 		ReturnValue ret = g_game().internalAddItem(tile, item);
 		if (ret == RETURNVALUE_NOERROR) {
 			item->startDecaying();
+
+			// Apply field damage immediately when field is created
+			if (item->isMagicField()) {
+				const auto &magicField = item->getMagicField();
+				if (magicField) {
+					// Get creatures on this tile at the same floor level
+					const Position &tilePos = tile->getPosition();
+					const int32_t fieldZ = tilePos.z;
+
+					if (CreatureVector* creatures = tile->getCreatures()) {
+						for (const auto &creature : *creatures) {
+							if (creature->getPosition().z == fieldZ) {
+								magicField->onStepInField(creature);
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -1104,6 +1274,9 @@ void Combat::setupChain(const std::shared_ptr<Weapon> &weapon) {
 	setChainCallback(g_configManager().getNumber(COMBAT_CHAIN_TARGETS), 1, true);
 
 	switch (weaponType) {
+		case WEAPON_FIST:
+			setCommonValues(g_configManager().getFloat(COMBAT_CHAIN_SKILL_FORMULA_FIST), HUMAN_CLOSE_ATK_FIST, CONST_ME_HITAREA);
+			break;
 		case WEAPON_SWORD:
 			setCommonValues(g_configManager().getFloat(COMBAT_CHAIN_SKILL_FORMULA_SWORD), MELEE_ATK_SWORD, CONST_ME_SLASH);
 			break;
@@ -2365,75 +2538,57 @@ void Combat::applyExtensions(const std::shared_ptr<Creature> &caster, const std:
 		return;
 	}
 
-	const auto &player = caster->getPlayer();
-	const auto &monster = caster->getMonster();
+	if (const auto &player = caster->getPlayer()) {
+		int32_t baseCriticalHitChance = static_cast<int32_t>(player->getSkillLevel(SKILL_CRITICAL_HIT_CHANCE));
+		baseCriticalHitChance += damage.criticalChance;
 
-	uint16_t baseChance = 0;
-	int32_t baseBonus = 50;
-	if (player) {
-		baseChance = player->getSkillLevel(SKILL_CRITICAL_HIT_CHANCE);
-		baseBonus = player->getSkillLevel(SKILL_CRITICAL_HIT_DAMAGE);
+		int32_t baseCriticalHitDamage = static_cast<int32_t>(player->getSkillLevel(SKILL_CRITICAL_HIT_DAMAGE));
+		baseCriticalHitDamage += damage.criticalDamage;
 
-		uint16_t lowBlowRaceid = player->parseRacebyCharm(CHARM_LOW);
-		uint16_t savageBlowRaceid = player->parseRacebyCharm(CHARM_SAVAGE);
+		const int32_t rand = uniform_random(1, 100) * 100;
+		bool canApplyCritical = (baseCriticalHitChance != 0 && rand <= baseCriticalHitChance);
 
-		baseBonus += damage.criticalDamage;
-		baseChance += static_cast<uint16_t>(damage.criticalChance);
-
-		bool canApplyCritical = false;
-		std::unordered_map<uint16_t, bool> lowBlowCrits;
-		canApplyCritical = (baseChance != 0 && uniform_random(1, 10000) <= baseChance);
-
+		// Bonus Fatal - Tier
 		bool canApplyFatal = false;
 		if (const auto &playerWeapon = player->getInventoryItem(CONST_SLOT_LEFT); playerWeapon && playerWeapon->getTier() > 0) {
 			double fatalChance = playerWeapon->getFatalChance();
-			if (const auto &playerBoots = player->getInventoryItem(CONST_SLOT_FEET); playerBoots && playerBoots->getTier()) {
-				fatalChance *= 1 + (playerBoots->getAmplificationChance() / 100);
+			if (const auto &playerBoots = player->getInventoryItem(CONST_SLOT_FEET); playerBoots && playerBoots->getTier() > 0) {
+				double amplifiedChance = playerBoots->getAmplificationChance();
+				fatalChance *= (amplifiedChance / 100.0) + 1.0;
 			}
-			canApplyFatal = (fatalChance > 0 && uniform_random(0, 10000) / 100.0 < fatalChance);
+
+			double randomRoll = uniform_random(1, 100) / 1.0;
+			canApplyFatal = (fatalChance > 0 && randomRoll < fatalChance);
 		}
 
-		if (!canApplyCritical && lowBlowRaceid != 0) {
-			const auto &charm = g_iobestiary().getBestiaryCharm(CHARM_LOW);
-			if (charm) {
-				auto charmTier = player->getCharmTier(CHARM_LOW);
-				uint16_t lowBlowChance = baseChance + (charm->chance[charmTier] * 100);
-
-				for (const auto &target : targets) {
-					const auto &targetMonster = target->getMonster();
-					if (!targetMonster) {
-						continue;
-					}
-
-					const auto &mType = g_monsters().getMonsterType(targetMonster->getName());
-					if (!mType) {
-						continue;
-					}
-
-					uint16_t raceId = mType->info.raceid;
-
-					if (raceId == lowBlowRaceid) {
-						if (!lowBlowCrits.contains(raceId)) {
-							lowBlowCrits[raceId] = (lowBlowChance != 0 && uniform_random(1, 10000) <= lowBlowChance);
-						}
-					}
-				}
+		// Bonus Low Blow Charm
+		int32_t criticalHitLowBlowChance = 0;
+		bool canApplyCriticalLowBlowChance = false;
+		const uint16_t playerLowBlowCharmRaceId = player->parseRacebyCharm(CHARM_LOW);
+		if (!canApplyCritical && (playerLowBlowCharmRaceId != 0)) {
+			if (const auto &charmLowBlow = g_iobestiary().getBestiaryCharm(CHARM_LOW)) {
+				const auto charmTier = player->getCharmTier(CHARM_LOW);
+				criticalHitLowBlowChance = static_cast<int32_t>(charmLowBlow->chance[charmTier] * 100);
+				canApplyCriticalLowBlowChance = rand <= static_cast<int32_t>(baseCriticalHitChance + criticalHitLowBlowChance);
 			}
 		}
 
-		int32_t savageBlowBonus = baseBonus;
-		if (savageBlowRaceid != 0) {
-			const auto &charm = g_iobestiary().getBestiaryCharm(CHARM_SAVAGE);
-			if (charm) {
-				auto charmTier = player->getCharmTier(CHARM_SAVAGE);
-				savageBlowBonus += charm->chance[charmTier] * 100;
+		// Bonus Savage Blow Charm
+		int32_t savageBlowBonus = 0;
+		const uint16_t playerSavageBlowCharmRaceId = player->parseRacebyCharm(CHARM_SAVAGE);
+		if (playerSavageBlowCharmRaceId != 0) {
+			if (const auto &charmSavageBlow = g_iobestiary().getBestiaryCharm(CHARM_SAVAGE)) {
+				const auto charmTier = player->getCharmTier(CHARM_SAVAGE);
+				savageBlowBonus = static_cast<int32_t>(charmSavageBlow->chance[charmTier] * 100);
 			}
 		}
+
+		const std::shared_ptr<Creature> &attackedCreature = player->getAttackedCreature();
 
 		bool isSingleCombat = targets.size() == 1;
 		for (const auto &targetCreature : targets) {
 			CombatDamage targetDamage = damage;
-			int32_t finalBonus = baseBonus;
+			int32_t finalCriticalHitDamage = baseCriticalHitDamage;
 			bool isTargetCritical = canApplyCritical;
 
 			const auto &targetMonster = targetCreature->getMonster();
@@ -2443,23 +2598,87 @@ void Combat::applyExtensions(const std::shared_ptr<Creature> &caster, const std:
 					continue;
 				}
 
-				uint16_t raceId = mType->info.raceid;
+				const uint16_t raceId = mType->info.raceid;
 
-				if (!canApplyCritical && lowBlowCrits.contains(raceId) && lowBlowCrits[raceId]) {
+				if (!isTargetCritical && raceId == playerLowBlowCharmRaceId && canApplyCriticalLowBlowChance) {
 					isTargetCritical = true;
 				}
 
-				if (raceId == savageBlowRaceid) {
-					finalBonus = savageBlowBonus;
+				const auto &proficiencyPerk = player->getEquippedWeaponProficiency();
+
+				// Proficiency Perk: critHitChanceForAutoAttack
+				if (!isTargetCritical && attackedCreature == targetCreature) {
+					const uint16_t critHitChanceForAutoAttack = proficiencyPerk.critHitChanceForAutoAttack;
+					if (critHitChanceForAutoAttack > 0) {
+						if (rand <= static_cast<int32_t>(baseCriticalHitChance + criticalHitLowBlowChance + critHitChanceForAutoAttack)) {
+							isTargetCritical = true;
+						}
+					}
+				}
+
+				if (!isTargetCritical && (!targetDamage.instantSpellName.empty() || !targetDamage.runeSpellName.empty())) {
+					int32_t critHitChanceProficiencyPerk = 0;
+
+					// Proficiency Perk: critHitChanceForOffensiveRunes
+					const int32_t critHitChanceForOffensiveRunes = proficiencyPerk.critHitChanceForOffensiveRunes;
+					if (critHitChanceForOffensiveRunes > 0 && !targetDamage.runeSpellName.empty()) {
+						const std::shared_ptr<Spell> &rune = g_spells().getRuneSpellByName(damage.runeSpellName);
+						if (rune && rune->getGroup() == SPELLGROUP_ATTACK) {
+							critHitChanceProficiencyPerk += critHitChanceForOffensiveRunes;
+							if (rand <= static_cast<int32_t>(baseCriticalHitChance + criticalHitLowBlowChance + critHitChanceProficiencyPerk)) {
+								isTargetCritical = true;
+							}
+						}
+					}
+
+					// Proficiency Perk: critHitChanceForElementIdToSpellsAndRunes
+					const int32_t critHitChanceForElementIdToSpellsAndRunes = proficiencyPerk.critHitChanceForElementIdToSpellsAndRunes[combatTypeToIndex(targetDamage.primary.type)];
+					if (!isTargetCritical && critHitChanceForElementIdToSpellsAndRunes > 0) {
+						critHitChanceProficiencyPerk += critHitChanceForElementIdToSpellsAndRunes;
+						if (rand <= static_cast<int32_t>(baseCriticalHitChance + criticalHitLowBlowChance + critHitChanceProficiencyPerk)) {
+							isTargetCritical = true;
+						}
+					}
+				}
+
+				if (isTargetCritical) {
+					// Proficiency Perk: critExtraDamageForAutoAttack
+					if (attackedCreature == targetCreature) {
+						const int32_t critExtraDamageForAutoAttack = static_cast<int32_t>(proficiencyPerk.critExtraDamageForAutoAttack);
+						if (critExtraDamageForAutoAttack > 0) {
+							finalCriticalHitDamage += critExtraDamageForAutoAttack;
+						}
+					}
+
+					if ((savageBlowBonus != 0) && raceId == playerSavageBlowCharmRaceId) {
+						finalCriticalHitDamage += savageBlowBonus;
+					}
+
+					if (!targetDamage.instantSpellName.empty() || !targetDamage.runeSpellName.empty()) {
+						// Proficiency Perk: critExtraDamageForOffensiveRunes
+						const int32_t critExtraDamageForOffensiveRunes = proficiencyPerk.critExtraDamageForOffensiveRunes;
+						if (critExtraDamageForOffensiveRunes > 0 && !targetDamage.runeSpellName.empty()) {
+							const std::shared_ptr<Spell> &rune = g_spells().getRuneSpellByName(damage.runeSpellName);
+							if (rune && rune->getGroup() == SPELLGROUP_ATTACK) {
+								finalCriticalHitDamage += static_cast<int32_t>(critExtraDamageForOffensiveRunes);
+							}
+						}
+
+						// Proficiency Perk: critExtraDamageForElementIdToSpellsAndRunes
+						const int32_t critExtraDamageForElementIdToSpellsAndRunes = proficiencyPerk.critExtraDamageForElementIdToSpellsAndRunes[combatTypeToIndex(targetDamage.primary.type)];
+						if (critExtraDamageForElementIdToSpellsAndRunes > 0) {
+							finalCriticalHitDamage += critExtraDamageForElementIdToSpellsAndRunes;
+						}
+					}
 				}
 			}
 
-			double targetMultiplier = 1.0 + static_cast<double>(finalBonus) / 10000.0;
-
 			if (isTargetCritical) {
+				double targetMultiplier = 1.0 + static_cast<double>(finalCriticalHitDamage) / 10000.0;
 				targetDamage.critical = true;
 				targetDamage.primary.value *= targetMultiplier;
 				targetDamage.secondary.value *= targetMultiplier;
+				targetCreature->setCombatDamage(targetDamage);
 			}
 
 			if (canApplyFatal) {
@@ -2471,20 +2690,20 @@ void Combat::applyExtensions(const std::shared_ptr<Creature> &caster, const std:
 			// If is single target, apply the damage directly
 			if (isSingleCombat) {
 				damage = targetDamage;
-				continue;
 			}
 
-			// If is multi target, apply the damage to each target
 			targetCreature->setCombatDamage(targetDamage);
 		}
-	} else if (monster) {
-		baseChance = monster->getCriticalChance() * 100;
-		baseBonus = monster->getCriticalDamage() * 100;
-		baseBonus += damage.criticalDamage;
-		double multiplier = 1.0 + static_cast<double>(baseBonus) / 10000;
-		baseChance += static_cast<uint16_t>(damage.criticalChance);
+	} else if (const auto &monster = caster->getMonster()) {
+		int32_t baseCriticalHitChance = 0;
+		baseCriticalHitChance = static_cast<int32_t>(monster->getCriticalChance() * 100);
+		baseCriticalHitChance += static_cast<uint16_t>(damage.criticalChance);
 
-		if (baseChance != 0 && uniform_random(1, 10000) <= baseChance) {
+		if (baseCriticalHitChance != 0 && (uniform_random(1, 100) * 100) <= baseCriticalHitChance) {
+			int32_t baseCriticalHitDamage = 50;
+			baseCriticalHitDamage = static_cast<int32_t>(monster->getCriticalDamage() * 100);
+			baseCriticalHitDamage += damage.criticalDamage;
+			double multiplier = 1.0 + static_cast<double>(baseCriticalHitDamage) / 10000;
 			damage.critical = true;
 			damage.primary.value *= multiplier;
 			damage.secondary.value *= multiplier;
@@ -2597,4 +2816,36 @@ const bool* MatrixArea::operator[](uint32_t i) const {
 
 bool* MatrixArea::operator[](uint32_t i) {
 	return data_[i];
+}
+
+CombatDamage Combat::applyWeaponProficiencyDamage(const std::shared_ptr<Player> &attackerPlayer, std::shared_ptr<Item> item, std::shared_ptr<Monster> &targetMonster, CombatDamage damage) {
+	if (!item || !attackerPlayer) {
+		return damage;
+	}
+
+	if (const auto &targetMonsterType = targetMonster->getMonsterType()) {
+		const auto &proficiencyPerk = attackerPlayer->getEquippedWeaponProficiency();
+
+		// Proficiency Perk: bestiaryRacePercentDamageGain
+		const uint8_t weaponProficiencyBestiaryId = proficiencyPerk.bestiaryId;
+		if (weaponProficiencyBestiaryId > 0) {
+			if (targetMonsterType->info.bestiaryRace == static_cast<BestiaryType_t>(weaponProficiencyBestiaryId)) {
+				const float bonusPercent = proficiencyPerk.bestiaryRacePercentDamageGain;
+				damage.primary.value += static_cast<int32_t>(std::ceil(damage.primary.value * bonusPercent));
+				damage.secondary.value += static_cast<int32_t>(std::ceil(damage.secondary.value * bonusPercent));
+			}
+		}
+
+		// Proficiency Perk: damageGainBossAndSinisterEmbraced
+		const float weaponProficiencydamageGainBossAndSinisterEmbraced = proficiencyPerk.damageGainBossAndSinisterEmbraced;
+		if (weaponProficiencydamageGainBossAndSinisterEmbraced > 0) {
+			const ForgeClassifications_t classification = targetMonster->getMonsterForgeClassification();
+			if (targetMonsterType->isBoss() || classification == ForgeClassifications_t::FORGE_INFLUENCED_MONSTER || classification == ForgeClassifications_t::FORGE_FIENDISH_MONSTER) {
+				damage.primary.value += static_cast<int32_t>(std::ceil(damage.primary.value * weaponProficiencydamageGainBossAndSinisterEmbraced));
+				damage.secondary.value += static_cast<int32_t>(std::ceil(damage.secondary.value * weaponProficiencydamageGainBossAndSinisterEmbraced));
+			}
+		}
+	}
+
+	return damage;
 }

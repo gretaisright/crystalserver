@@ -89,7 +89,8 @@ void ItemParse::initParse(const std::string &stringValue, pugi::xml_node attribu
 	ItemParse::parsePrimaryType(stringValue, valueAttribute, itemType);
 	ItemParse::parseHouseRelated(stringValue, valueAttribute, itemType);
 	ItemParse::parseUnscriptedItems(stringValue, attributeNode, valueAttribute, itemType);
-	ItemParse::parsePreventLoss(stringValue, valueAttribute, itemType);
+	ItemParse::parseElementalBond(stringValue, valueAttribute, itemType);
+	ItemParse::parseMantra(stringValue, valueAttribute, itemType);
 }
 
 void ItemParse::parseDummyRate(pugi::xml_node attributeNode, ItemType &itemType) {
@@ -263,12 +264,6 @@ void ItemParse::parseWriteables(const std::string &stringValue, pugi::xml_attrib
 		itemType.maxTextLen = pugi::cast<uint16_t>(valueAttribute.value());
 	} else if (stringValue == "writeonceitemid") {
 		itemType.writeOnceItemId = pugi::cast<uint16_t>(valueAttribute.value());
-	}
-}
-
-void ItemParse::parsePreventLoss(const std::string &stringValue, pugi::xml_attribute valueAttribute, ItemType &itemType) {
-	if (stringValue == "preventloss") {
-		itemType.preventLoss = pugi::cast<uint16_t>(valueAttribute.value());
 	}
 }
 
@@ -533,8 +528,11 @@ void ItemParse::parseAbsorbPercent(const std::string &stringValue, pugi::xml_att
 	if (stringValue == "absorbpercentall") {
 		const auto value = pugi::cast<int16_t>(valueAttribute.value());
 		Abilities &abilities = itemType.getAbilities();
-		for (auto &i : abilities.absorbPercent) {
-			i += value;
+		for (uint32_t i = COMBAT_FIRST; i <= COMBAT_LAST; ++i) {
+			CombatType_t combatType = indexToCombatType(i);
+			if (combatType != COMBAT_UNDEFINEDDAMAGE) {
+				abilities.absorbPercent[combatTypeToIndex(combatType)] += value;
+			}
 		}
 	} else if (stringValue == "absorbpercentelements") {
 		const auto value = pugi::cast<int16_t>(valueAttribute.value());
@@ -588,6 +586,8 @@ void ItemParse::parseSupressDrunk(const std::string &stringValue, pugi::xml_attr
 			conditionType = CONDITION_FIRE;
 		} else if (stringValue == "suppresspoison") {
 			conditionType = CONDITION_POISON;
+		} else if (stringValue == "suppressagony") {
+			conditionType = CONDITION_AGONY;
 		} else if (stringValue == "suppressdrown") {
 			conditionType = CONDITION_DROWN;
 		} else if (stringValue == "suppressphysical") {
@@ -623,6 +623,9 @@ std::tuple<ConditionId_t, ConditionType_t> ItemParse::parseFieldConditions(pugi:
 	} else if (lowerStringValue == "physical") {
 		conditionType = CONDITION_BLEEDING;
 		return std::make_tuple(conditionId, conditionType);
+	} else if (lowerStringValue == "agony") {
+		conditionType = CONDITION_AGONY;
+		return std::make_tuple(conditionId, conditionType);
 	} else {
 		g_logger().warn("[Items::parseItemNode] Unknown field value {}", valueAttribute.as_string());
 	}
@@ -641,6 +644,8 @@ CombatType_t ItemParse::parseFieldCombatType(pugi::xml_attribute valueAttribute)
 		return COMBAT_DROWNDAMAGE;
 	} else if (lowerStringValue == "physical") {
 		return COMBAT_PHYSICALDAMAGE;
+	} else if (lowerStringValue == "agony") {
+		return COMBAT_AGONYDAMAGE;
 	} else {
 		g_logger().warn("[Items::parseItemNode] Unknown field value {}", valueAttribute.as_string());
 	}
@@ -1014,6 +1019,7 @@ void ItemParse::createAndRegisterScript(ItemType &itemType, pugi::xml_node attri
 		}
 
 		weapon->weaponType = weaponType;
+		weapon->elementalBond = itemType.elementalBond;
 		itemType.weaponType = weapon->weaponType;
 		weapon->configureWeapon(itemType);
 		g_logger().trace("Created weapon with type '{}'", getWeaponName(weaponType));
@@ -1277,5 +1283,32 @@ void ItemParse::parseUnscriptedItems(std::string_view stringValue, pugi::xml_nod
 				createAndRegisterScript(itemType, attributeNode, MOVE_EVENT_NONE, weaponType);
 			}
 		}
+	}
+}
+
+void ItemParse::parseElementalBond(const std::string &stringValue, pugi::xml_attribute valueAttribute, ItemType &itemType) {
+	if (stringValue == "elementalbond") {
+		Abilities &abilities = itemType.getAbilities();
+		const std::string &elementalBond = valueAttribute.value();
+		if (elementalBond == "energy") {
+			abilities.elementType = COMBAT_ENERGYDAMAGE;
+		} else if (elementalBond == "earth") {
+			abilities.elementType = COMBAT_EARTHDAMAGE;
+		} else if (elementalBond == "physical") {
+			abilities.elementType = COMBAT_PHYSICALDAMAGE;
+		}
+		itemType.elementalBond = elementalBond;
+	}
+}
+
+void ItemParse::parseMantra(const std::string &stringValue, pugi::xml_attribute valueAttribute, ItemType &itemType) {
+	if (stringValue == "mantra") {
+		const auto value = pugi::cast<int16_t>(valueAttribute.value());
+		Abilities &abilities = itemType.getAbilities();
+		abilities.mantraAbsorbValue[combatTypeToIndex(COMBAT_ENERGYDAMAGE)] += value;
+		abilities.mantraAbsorbValue[combatTypeToIndex(COMBAT_FIREDAMAGE)] += value;
+		abilities.mantraAbsorbValue[combatTypeToIndex(COMBAT_EARTHDAMAGE)] += value;
+		abilities.mantraAbsorbValue[combatTypeToIndex(COMBAT_ICEDAMAGE)] += value;
+		itemType.mantra = value;
 	}
 }

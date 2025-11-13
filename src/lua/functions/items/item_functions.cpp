@@ -101,6 +101,10 @@ void ItemFunctions::init(lua_State* L) {
 
 	Lua::registerMethod(L, "Item", "canReceiveAutoCarpet", ItemFunctions::luaItemCanReceiveAutoCarpet);
 
+	Lua::registerMethod(L, "Item", "setShader", ItemFunctions::luaItemSetShader);
+	Lua::registerMethod(L, "Item", "getShader", ItemFunctions::luaItemGetShader);
+	Lua::registerMethod(L, "Item", "hasShader", ItemFunctions::luaItemHasShader);
+
 	ContainerFunctions::init(L);
 	ImbuementFunctions::init(L);
 	ItemTypeFunctions::init(L);
@@ -518,11 +522,11 @@ int ItemFunctions::luaItemSetAttribute(lua_State* L) {
 	if (item->isAttributeInteger(attribute)) {
 		switch (attribute) {
 			case ItemAttribute_t::DECAYSTATE: {
-				if (const auto decayState = Lua::getNumber<ItemDecayState_t>(L, 3);
-				    decayState == DECAYING_FALSE || decayState == DECAYING_STOPPING) {
-					g_decay().stopDecay(item);
+				ItemDecayState_t decayState = Lua::getNumber<ItemDecayState_t>(L, 3);
+				if (decayState == DECAYING_FALSE || decayState == DECAYING_STOPPING) {
+					g_game().stopDecay(item);
 				} else {
-					g_decay().startDecay(item);
+					g_game().startDecay(item);
 				}
 				Lua::pushBoolean(L, true);
 				return 1;
@@ -530,7 +534,7 @@ int ItemFunctions::luaItemSetAttribute(lua_State* L) {
 			case ItemAttribute_t::DURATION: {
 				item->setDecaying(DECAYING_PENDING);
 				item->setDuration(Lua::getNumber<int32_t>(L, 3));
-				g_decay().startDecay(item);
+				g_game().startDecay(item);
 				Lua::pushBoolean(L, true);
 				return 1;
 			}
@@ -1141,5 +1145,42 @@ int ItemFunctions::luaItemHasOwner(lua_State* L) {
 	}
 
 	Lua::pushBoolean(L, item->hasOwner());
+	return 1;
+}
+
+int ItemFunctions::luaItemHasShader(lua_State* L) {
+	// item:hasShader()
+	const auto &item = Lua::getUserdataShared<Item>(L, 1);
+	if (!item) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_ITEM_NOT_FOUND));
+		return 1;
+	}
+	Lua::pushBoolean(L, item->hasShader());
+	return 1;
+}
+
+int ItemFunctions::luaItemGetShader(lua_State* L) {
+	// item:getShader()
+	const auto &item = Lua::getUserdataShared<Item>(L, 1);
+	if (!item) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_ITEM_NOT_FOUND));
+		Lua::pushBoolean(L, false);
+		return 1;
+	}
+	Lua::pushString(L, item->getShader());
+	return 1;
+}
+
+int ItemFunctions::luaItemSetShader(lua_State* L) {
+	// item:setShader(shaderName)
+	const auto &item = Lua::getUserdataShared<Item>(L, 1);
+	if (!item) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_ITEM_NOT_FOUND));
+		Lua::pushBoolean(L, false);
+		return 1;
+	}
+	item->setShader(Lua::getString(L, 2));
+	g_game().refreshItem(item);
+	Lua::pushBoolean(L, true);
 	return 1;
 }

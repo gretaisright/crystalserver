@@ -57,6 +57,7 @@ local config = {
 	[VOCATION.BASE_ID.DRUID] = "D R U I D",
 	[VOCATION.BASE_ID.PALADIN] = "P A L A D I N",
 	[VOCATION.BASE_ID.KNIGHT] = "K N I G H T",
+	[VOCATION.BASE_ID.MONK] = "M O N K",
 }
 
 local function greetCallback(npc, creature)
@@ -102,6 +103,21 @@ local function creatureSayCallback(npc, creature, type, message)
 			npcHandler:say("You are better than I thought! Congratulations, here you are: Form 356!", npc, creature)
 		end
 	end
+
+	if MsgContains(message, "bribe") and player:getStorageValue(Storage.Quest.U7_9.ThePitsOfInferno.ThronePumin) < 9 then
+		npcHandler:say("Shhh! Lower your voice! So do you want permission to enter huh? How about 10000 gold?", npc, creature)
+		npcHandler:setTopic(playerId, 4)
+	elseif MsgContains(message, "yes") and npcHandler:getTopic(playerId) == 4 then
+		if player:getMoney() >= 10000 then
+			player:removeMoney(10000)
+			player:setStorageValue(Storage.Quest.U7_9.ThePitsOfInferno.ThronePumin, 9)
+			npcHandler:say("Have fun at Pumin's Domain!", npc, creature)
+			npcHandler:setTopic(playerId, 0)
+		else
+			npcHandler:say("You don't have enough gold.", npc, creature)
+		end
+	end
+
 	return true
 end
 

@@ -47,6 +47,7 @@ enum PlayerSex_t : uint8_t;
 #ifndef USE_PRECOMPILED_HEADERS
 	#include <random>
 #endif
+#include <ctime>
 
 void printXMLError(const std::string &where, const std::string &fileName, const pugi::xml_parse_result &result);
 
@@ -181,7 +182,6 @@ uint8_t forgeBonus(int32_t number);
 
 std::string formatPrice(std::string price, bool space /* = false*/);
 std::vector<std::string> split(const std::string &str, char delimiter = ',');
-std::string getFormattedTimeRemaining(uint32_t time);
 
 unsigned int getNumberOfCores();
 
@@ -225,3 +225,5 @@ float calculateEquipmentLoss(uint8_t blessingAmount, bool isContainer = false);
 uint8_t calculateMaxPvpReduction(uint8_t blessCount, bool isPromoted = false);
 
 std::string convertToUTF8(const std::string &input);
+
+extern const std::unordered_set<std::string_view> harmonySpells;

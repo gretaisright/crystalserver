@@ -27,6 +27,8 @@
 #include "game/zones/zone.hpp"
 #include "lib/metrics/metrics.hpp"
 #include "lua/creature/creatureevent.hpp"
+#include "lua/callbacks/event_callback.hpp"
+#include "lua/callbacks/events_callbacks.hpp"
 #include "map/spectators.hpp"
 #include "creatures/players/player.hpp"
 #include "server/network/protocol/protocolgame.hpp"
@@ -625,7 +627,17 @@ void Creature::onDeath() {
 		);
 	}
 
+	if (getPlayer()) {
+		if (const auto &tile = getTile()) {
+			for (const auto &zone : tile->getZones()) {
+				zone->creatureRemoved(getPlayer());
+				g_callbacks().executeCallback(EventCallback_t::zoneAfterCreatureLeave, &EventCallback::zoneAfterCreatureLeave, zone, getPlayer());
+			}
+		}
+	}
+
 	bool droppedCorpse = dropCorpse(lastHitCreature, mostDamageCreature, lastHitUnjustified, mostDamageUnjustified);
+
 	death(lastHitCreature);
 
 	if (droppedCorpse && !getPlayer()) {
@@ -1128,6 +1140,9 @@ void Creature::onTickCondition(ConditionType_t type, bool &bRemove) {
 		case CONDITION_BLEEDING:
 			bRemove = (field->getCombatType() != COMBAT_PHYSICALDAMAGE);
 			break;
+		case CONDITION_AGONY:
+			bRemove = (field->getCombatType() != COMBAT_AGONYDAMAGE);
+			break;
 		default:
 			break;
 	}
@@ -1375,6 +1390,7 @@ std::vector<std::shared_ptr<Condition>> Creature::getCleansableConditions() cons
 			case CONDITION_PARALYZE:
 			case CONDITION_ROOTED:
 			case CONDITION_FEARED:
+			case CONDITION_AGONY:
 				cleansableConditions.emplace_back(condition);
 				break;
 
@@ -1439,8 +1455,8 @@ uint16_t Creature::getStepDuration(Direction dir) {
 	}
 
 	if (walk.needRecache()) {
-		walk.duration = static_cast<uint16_t>(std::round(walk.calculatedStepSpeed / SERVER_BEAT) * SERVER_BEAT);
-		walk.duration = std::max<uint16_t>(50, walk.duration);
+		auto duration = std::floor(1000 * walk.groundSpeed / walk.calculatedStepSpeed);
+		walk.duration = static_cast<uint16_t>(std::ceil(duration / SERVER_BEAT) * SERVER_BEAT);
 	}
 
 	auto duration = walk.duration;
@@ -1576,7 +1592,7 @@ void Creature::setParent(std::weak_ptr<Cylinder> cylinder) {
 	}
 
 	if (walk.groundSpeed != oldGroundSpeed) {
-		updateCalculatedStepSpeed();
+		walk.recache();
 	}
 }
 
@@ -1865,7 +1881,7 @@ void Creature::sendAsyncTasks() {
 	setAsyncTaskFlag(AsyncTaskRunning, true);
 	g_dispatcher().asyncEvent([self = std::weak_ptr<Creature>(getCreature())] {
 		if (const auto &creature = self.lock()) {
-			if (!creature->isRemoved()) {
+			if (!creature->isRemoved() && creature->isAlive()) {
 				for (const auto &task : creature->asyncTasks) {
 					task();
 				}
@@ -1905,4 +1921,22 @@ void Creature::setCombatDamage(const CombatDamage &damage) {
 
 CombatDamage Creature::getCombatDamage() const {
 	return m_combatDamage;
+}
+
+void Creature::attachEffectById(uint16_t id) {
+	auto it = std::ranges::find(attachedEffectList, id);
+	if (it != attachedEffectList.end()) {
+		return;
+	}
+	attachedEffectList.push_back(id);
+	g_game().sendAttachedEffect(static_self_cast<Creature>(), id);
+}
+
+void Creature::detachEffectById(uint16_t id) {
+	auto it = std::ranges::find(attachedEffectList, id);
+	if (it == attachedEffectList.end()) {
+		return;
+	}
+	attachedEffectList.erase(it);
+	g_game().sendDetachEffect(static_self_cast<Creature>(), id);
 }

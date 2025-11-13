@@ -183,11 +183,17 @@ bool ConfigManager::load() {
 	loadBoolConfig(L, TOGGLE_SPECIAL_TILES, "toggleSpecialTiles", false);
 	loadBoolConfig(L, STATS_TRACK_LUA_ADD_EVENTS, "statsTrackLuaAddEvents", false);
 	loadBoolConfig(L, STATS_TRACK_LUA_ADD_EVENTS_HASHES, "statsTrackLuaAddEventsHashes", false);
+	loadBoolConfig(L, TOGGLE_GUILDHALL_NEED_GUILD, "toggleGuildHallNeedGuild", true);
+	loadBoolConfig(L, TOGGLE_MAX_CONNECTIONS_BY_IP, "toggleMaxConnectionsByIP", false);
+	loadBoolConfig(L, TOGGLE_GUILD_WARS, "toggleGuildWars", false);
+	loadBoolConfig(L, INGAME_GUILD_MANAGEMENT, "ingameGuildManagement", true);
+	loadBoolConfig(L, CREATE_GUILD_ONLY_PREMIUM, "createGuildOnlyPremium", true);
 
 	loadFloatConfig(L, BESTIARY_RATE_CHARM_SHOP_PRICE, "bestiaryRateCharmShopPrice", 1.0);
 	loadFloatConfig(L, COMBAT_CHAIN_SKILL_FORMULA_AXE, "combatChainSkillFormulaAxe", 0.9);
 	loadFloatConfig(L, COMBAT_CHAIN_SKILL_FORMULA_CLUB, "combatChainSkillFormulaClub", 0.7);
 	loadFloatConfig(L, COMBAT_CHAIN_SKILL_FORMULA_SWORD, "combatChainSkillFormulaSword", 1.1);
+	loadFloatConfig(L, COMBAT_CHAIN_SKILL_FORMULA_FIST, "combatChainSkillFormulaFist", 1.0);
 	loadFloatConfig(L, FORGE_AMOUNT_MULTIPLIER, "forgeAmountMultiplier", 3.0);
 	loadFloatConfig(L, HAZARD_EXP_BONUS_MULTIPLIER, "hazardExpBonusMultiplier", 2.0);
 	loadFloatConfig(L, LOYALTY_BONUS_PERCENTAGE_MULTIPLIER, "loyaltyBonusPercentageMultiplier", 1.0);
@@ -220,9 +226,9 @@ bool ConfigManager::load() {
 	loadFloatConfig(L, RUSE_CHANCE_FORMULA_A, "ruseChanceFormulaA", 0.0307576);
 	loadFloatConfig(L, RUSE_CHANCE_FORMULA_B, "ruseChanceFormulaB", 0.440697);
 	loadFloatConfig(L, RUSE_CHANCE_FORMULA_C, "ruseChanceFormulaC", 0.026);
-	loadFloatConfig(L, TRANSCENDANCE_CHANCE_FORMULA_A, "transcendanceChanceFormulaA", 0.0127);
-	loadFloatConfig(L, TRANSCENDANCE_CHANCE_FORMULA_B, "transcendanceChanceFormulaB", 0.1070);
-	loadFloatConfig(L, TRANSCENDANCE_CHANCE_FORMULA_C, "transcendanceChanceFormulaC", 0.0073);
+	loadFloatConfig(L, TRANSCENDENCE_CHANCE_FORMULA_A, "transcendenceChanceFormulaA", 0.0127);
+	loadFloatConfig(L, TRANSCENDENCE_CHANCE_FORMULA_B, "transcendenceChanceFormulaB", 0.1070);
+	loadFloatConfig(L, TRANSCENDENCE_CHANCE_FORMULA_C, "transcendenceChanceFormulaC", 0.0073);
 	loadFloatConfig(L, COMBAT_CHAIN_SKILL_FORMULA_DISTANCE, "combatChainSkillFormulaDistance", 0.9);
 	loadFloatConfig(L, COMBAT_CHAIN_SKILL_FORMULA_MISSILE, "combatChainSkillFormulaMissile", 0.9);
 	loadFloatConfig(L, COMBAT_CHAIN_SKILL_FORMULA_WANDS_AND_RODS, "combatChainSkillFormulaWandsAndRods", 1.0);
@@ -254,7 +260,6 @@ bool ConfigManager::load() {
 	loadIntConfig(L, DEFAULT_RESPAWN_TIME, "defaultRespawnTime", 60);
 	loadIntConfig(L, DEFAULT_DESPAWNRADIUS, "deSpawnRadius", 50);
 	loadIntConfig(L, DEFAULT_DESPAWNRANGE, "deSpawnRange", 2);
-	loadIntConfig(L, DEPOTCHEST, "depotChest", 4);
 	loadIntConfig(L, DISCORD_WEBHOOK_DELAY_MS, "discordWebhookDelayMs", Webhook::DEFAULT_DELAY_MS);
 	loadIntConfig(L, EX_ACTIONS_DELAY_INTERVAL, "timeBetweenExActions", 1000);
 	loadIntConfig(L, EXP_FROM_PLAYERS_LEVEL_RANGE, "expFromPlayersLevelRange", 75);
@@ -359,7 +364,7 @@ bool ConfigManager::load() {
 	loadIntConfig(L, TASK_HUNTING_SELECTION_LIST_PRICE, "taskHuntingSelectListPrice", 5);
 	loadIntConfig(L, TIBIADROME_CONCOCTION_COOLDOWN, "tibiadromeConcoctionCooldown", 24 * 60 * 60);
 	loadIntConfig(L, TIBIADROME_CONCOCTION_DURATION, "tibiadromeConcoctionDuration", 1 * 60 * 60);
-	loadIntConfig(L, TRANSCENDANCE_AVATAR_DURATION, "transcendanceAvatarDuration", 7000);
+	loadIntConfig(L, TRANSCENDENCE_AVATAR_DURATION, "transcendenceAvatarDuration", 7000);
 	loadIntConfig(L, VIP_BONUS_EXP, "vipBonusExp", 0);
 	loadIntConfig(L, VIP_BONUS_LOOT, "vipBonusLoot", 0);
 	loadIntConfig(L, VIP_BONUS_SKILL, "vipBonusSkill", 0);
@@ -406,6 +411,12 @@ bool ConfigManager::load() {
 	loadIntConfig(L, STATS_DUMP_INTERVAL, "statsDumpInterval", 30000);
 	loadIntConfig(L, STATS_SLOW_LOG_TIME, "statsSlowLogTime", 10);
 	loadIntConfig(L, STATS_VERY_SLOW_LOG_TIME, "statsVerySlowLogTime", 50);
+	loadIntConfig(L, MAX_HOUSES_LIMIT, "maxHousesLimit", 3);
+	loadIntConfig(L, MAX_IP_CONNECTIONS, "maxIPConnections", 4);
+	loadIntConfig(L, STASH_MANAGE_AMOUNT, "stashManageAmount", 100000);
+	loadIntConfig(L, GUILD_WARS_MINIMUM_FRAGS, "guildWarsMinimunFrags", 10);
+	loadIntConfig(L, GUILD_WARS_DEFAULT_FRAGS, "guildWarsDefaultFrags", 100);
+	loadIntConfig(L, LEVEL_TO_FORM_GUILD, "levelToFormGuild", 8);
 
 	loadStringConfig(L, CORE_DIRECTORY, "coreDirectory", "data");
 	loadStringConfig(L, DATA_DIRECTORY, "dataPackDirectory", "data-global");
@@ -427,6 +438,8 @@ bool ConfigManager::load() {
 	loadStringConfig(L, URL, "url", "");
 	loadStringConfig(L, WORLD_TYPE, "worldType", "pvp");
 	loadStringConfig(L, LOGLEVEL, "logLevel", "info");
+
+	loadLuaOTCFeatures(L);
 
 	loaded = true;
 	lua_close(L);
@@ -528,4 +541,50 @@ float ConfigManager::getFloat(const ConfigKey_t &key, const std::source_location
 	}
 	g_logger().warn("[{}] accessing invalid or wrong type index: {}[{}]. Called line: {}:{}, in {}", __FUNCTION__, magic_enum::enum_name(key), fmt::underlying(key), location.line(), location.column(), location.function_name());
 	return 0.0f;
+}
+
+void ConfigManager::loadLuaOTCFeatures(lua_State* L) {
+	lua_getglobal(L, "OTCRFeatures");
+	if (!lua_istable(L, -1)) {
+		// Temp to avoid a bug in OTC if the "OTCRFeatures" array is not declared in config.lua.
+		enabledFeaturesOTC.push_back(101);
+		enabledFeaturesOTC.push_back(102);
+		enabledFeaturesOTC.push_back(103);
+		enabledFeaturesOTC.push_back(118);
+		lua_pop(L, 1);
+		return;
+	}
+
+	lua_pushstring(L, "enableFeature");
+	lua_gettable(L, -2);
+	if (lua_istable(L, -1)) {
+		lua_pushnil(L);
+		while (lua_next(L, -2) != 0) {
+			const auto feature = static_cast<uint8_t>(lua_tointeger(L, -1));
+			enabledFeaturesOTC.push_back(feature);
+			lua_pop(L, 1);
+		}
+	}
+	lua_pop(L, 1);
+
+	lua_pushstring(L, "disableFeature");
+	lua_gettable(L, -2);
+	if (lua_istable(L, -1)) {
+		lua_pushnil(L);
+		while (lua_next(L, -2) != 0) {
+			const auto feature = static_cast<uint8_t>(lua_tointeger(L, -1));
+			disabledFeaturesOTC.push_back(feature);
+			lua_pop(L, 1);
+		}
+	}
+	lua_pop(L, 1);
+
+	lua_pop(L, 1);
+}
+OTCFeatures ConfigManager::getEnabledFeaturesOTC() const {
+	return enabledFeaturesOTC;
+}
+
+OTCFeatures ConfigManager::getDisabledFeaturesOTC() const {
+	return disabledFeaturesOTC;
 }

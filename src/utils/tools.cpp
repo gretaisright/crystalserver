@@ -29,6 +29,9 @@
 #include "absl/debugging/symbolize.h"
 
 #include <boost/locale.hpp>
+#include <unordered_set>
+#include <string_view>
+#include <ctime>
 
 void printXMLError(const std::string &where, const std::string &fileName, const pugi::xml_parse_result &result) {
 	g_logger().error("[{}] Failed to load {}: {}", where, fileName, result.description());
@@ -453,31 +456,32 @@ std::string convertIPToString(uint32_t ip) {
 	return std::string(buffer.data());
 }
 
-std::string formatDate(time_t time) {
-	try {
-		return fmt::format("{:%d/%m/%Y %H:%M:%S}", fmt::localtime(time));
-	} catch (const std::out_of_range &exception) {
-		g_logger().error("Failed to format date with error code {}", exception.what());
+namespace {
+	std::string formatTimeString(time_t time, const char* format) {
+		std::tm tm_buf {};
+#if defined(_WIN32) || defined(_WIN64)
+		localtime_s(&tm_buf, &time);
+#else
+		localtime_r(&time, &tm_buf);
+#endif
+		char buffer[32];
+		if (std::strftime(buffer, sizeof(buffer), format, &tm_buf) != 0) {
+			return buffer;
+		}
+		return {};
 	}
-	return {};
+} // namespace
+
+std::string formatDate(time_t time) {
+	return formatTimeString(time, "%d/%m/%Y %H:%M:%S");
 }
 
 std::string formatDateShort(time_t time) {
-	try {
-		return fmt::format("{:%Y-%m-%d %X}", fmt::localtime(time));
-	} catch (const std::out_of_range &exception) {
-		g_logger().error("Failed to format date short with error code {}", exception.what());
-	}
-	return {};
+	return formatTimeString(time, "%Y-%m-%d %X");
 }
 
 std::string formatTime(time_t time) {
-	try {
-		return fmt::format("{:%H:%M:%S}", fmt::localtime(time));
-	} catch (const std::out_of_range &exception) {
-		g_logger().error("Failed to format time with error code {}", exception.what());
-	}
-	return {};
+	return formatTimeString(time, "%H:%M:%S");
 }
 
 std::string formatEnumName(std::string_view name) {
@@ -896,6 +900,7 @@ const ImbuementTypeNames imbuementTypeNames = {
 	{ "skillboost distance", IMBUEMENT_SKILLBOOST_DISTANCE },
 	{ "skillboost magic level", IMBUEMENT_SKILLBOOST_MAGIC_LEVEL },
 	{ "increase capacity", IMBUEMENT_INCREASE_CAPACITY },
+	{ "skillboost fist", IMBUEMENT_SKILLBOOST_FIST },
 	{ "paralysis removal", IMBUEMENT_PARALYSIS_REMOVAL },
 };
 
@@ -1004,13 +1009,13 @@ std::string getSkillName(uint8_t skillid) {
 			return "life leech chance";
 
 		case SKILL_LIFE_LEECH_AMOUNT:
-			return "life leech amount";
+			return "life leech";
 
 		case SKILL_MANA_LEECH_CHANCE:
 			return "mana leech chance";
 
 		case SKILL_MANA_LEECH_AMOUNT:
-			return "mana leech amount";
+			return "mana leech";
 
 		case SKILL_MAGLEVEL:
 			return "magic level";
@@ -1099,6 +1104,8 @@ std::string getWeaponName(WeaponType_t weaponType) {
 			return "ammunition";
 		case WEAPON_MISSILE:
 			return "missile";
+		case WEAPON_FIST:
+			return "fist";
 		default:
 			return {};
 	}
@@ -1114,7 +1121,8 @@ WeaponType_t getWeaponType(const std::string &name) {
 		{ "distance", WeaponType_t::WEAPON_DISTANCE },
 		{ "wand", WeaponType_t::WEAPON_WAND },
 		{ "ammo", WeaponType_t::WEAPON_AMMO },
-		{ "missile", WeaponType_t::WEAPON_MISSILE }
+		{ "missile", WeaponType_t::WEAPON_MISSILE },
+		{ "fist", WeaponType_t::WEAPON_FIST }
 	};
 
 	const auto it = type_mapping.find(name);
@@ -1558,6 +1566,9 @@ const char* getReturnMessage(ReturnValue value) {
 		case RETURNVALUE_ITEMUNTRADEABLE:
 			return "This item is untradeable.";
 
+		case RETURNVALUE_NOTENOUGHHARMONY:
+			return "You do not have enough harmony.";
+
 		// Any unhandled ReturnValue will go enter here
 		default:
 			return "Unknown error.";
@@ -1743,6 +1754,8 @@ std::string getObjectCategoryName(ObjectCategory_t category) {
 			return "Gold";
 		case OBJECTCATEGORY_QUIVERS:
 			return "Quiver";
+		case OBJECTCATEGORY_FISTS:
+			return "Weapons: Fists";
 		case OBJECTCATEGORY_DEFAULT:
 			return "Unassigned Loot";
 		default:
@@ -1778,6 +1791,7 @@ bool isValidObjectCategory(ObjectCategory_t category) {
 		OBJECTCATEGORY_TIBIACOINS,
 		OBJECTCATEGORY_CREATUREPRODUCTS,
 		OBJECTCATEGORY_QUIVERS,
+		OBJECTCATEGORY_FISTS,
 		OBJECTCATEGORY_GOLD,
 		OBJECTCATEGORY_DEFAULT,
 	};
@@ -1942,35 +1956,6 @@ std::vector<std::string> split(const std::string &str, char delimiter /* = ','*/
 		tokens.push_back(trimedToken);
 	}
 	return tokens;
-}
-
-std::string getFormattedTimeRemaining(uint32_t time) {
-	const time_t timeRemaining = time - getTimeNow();
-
-	const int days = static_cast<int>(std::floor(timeRemaining / 86400));
-
-	std::stringstream output;
-	if (days > 1) {
-		output << days << " days";
-		return output.str();
-	}
-
-	const auto hours = static_cast<int>(std::floor((timeRemaining % 86400) / 3600));
-	const auto minutes = static_cast<int>(std::floor((timeRemaining % 3600) / 60));
-	const auto seconds = static_cast<int>(timeRemaining % 60);
-
-	if (hours == 0 && minutes == 0 && seconds > 0) {
-		output << " less than 1 minute";
-	} else {
-		if (hours > 0) {
-			output << hours << " hour" << (hours != 1 ? "s" : "");
-		}
-		if (minutes > 0) {
-			output << (hours > 0 ? " and " : "") << minutes << " minute" << (minutes != 1 ? "s" : "");
-		}
-	}
-
-	return output.str();
 }
 
 unsigned int getNumberOfCores() {
@@ -2149,3 +2134,12 @@ uint8_t calculateMaxPvpReduction(uint8_t blessCount, bool isPromoted /* = false*
 std::string convertToUTF8(const std::string &input) {
 	return boost::locale::conv::to_utf<char>(input, "ISO-8859-1");
 }
+
+const std::unordered_set<std::string_view> harmonySpells = {
+	"Devastating Knockout",
+	"Greater Tiger Clash",
+	"Mass Spirit Mend",
+	"Spiritual Outburst",
+	"Sweeping Takedown",
+	"Tiger Clash"
+};

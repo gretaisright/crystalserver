@@ -227,6 +227,8 @@ bool IOLoginDataLoad::loadPlayerBasicInfo(const std::shared_ptr<Player> &player,
 	player->setMaxManaShield(result->getNumber<uint32_t>("max_manashield"));
 
 	player->setMarriageSpouse(result->getNumber<int32_t>("marriage_spouse"));
+	player->setVirtue(static_cast<VirtueMonk_t>(result->getNumber<uint8_t>("virtue")));
+	player->setHarmony(result->getNumber<uint8_t>("harmony"));
 	return true;
 }
 
@@ -329,6 +331,7 @@ void IOLoginDataLoad::loadPlayerDefaultOutfit(const std::shared_ptr<Player> &pla
 	player->defaultOutfit.lookMountBody = static_cast<uint8_t>(result->getNumber<uint16_t>("lookmountbody"));
 	player->defaultOutfit.lookMountLegs = static_cast<uint8_t>(result->getNumber<uint16_t>("lookmountlegs"));
 	player->defaultOutfit.lookMountFeet = static_cast<uint8_t>(result->getNumber<uint16_t>("lookmountfeet"));
+	player->currentMount = result->getNumber<uint16_t>("currentmount");
 	player->defaultOutfit.lookFamiliarsType = result->getNumber<uint16_t>("lookfamiliarstype");
 
 	if (g_configManager().getBoolean(WARN_UNSAFE_SCRIPTS) && player->defaultOutfit.lookFamiliarsType != 0 && !g_game().isLookTypeRegistered(player->defaultOutfit.lookFamiliarsType)) {
@@ -337,6 +340,26 @@ void IOLoginDataLoad::loadPlayerDefaultOutfit(const std::shared_ptr<Player> &pla
 	}
 
 	player->currentOutfit = player->defaultOutfit;
+
+	// load outfits & addons
+	auto result2 = g_database().storeQuery(fmt::format("SELECT `outfit_id`, `addons` FROM `player_outfits` WHERE `player_id` = {:d}", player->getGUID()));
+	if (result2) {
+		do {
+			player->outfitsMap.emplace_back(result2->getNumber<uint16_t>("outfit_id"), result2->getNumber<uint8_t>("addons"));
+		} while (result2->next());
+	}
+
+	// load mounts
+	auto result3 = g_database().storeQuery(fmt::format("SELECT `mount_id` FROM `player_mounts` WHERE `player_id` = {:d}", player->getGUID()));
+	if (result3) {
+		do {
+			player->mountsMap.emplace(result3->getNumber<uint16_t>("mount_id"));
+		} while (result3->next());
+	}
+
+	// Ensure player starts with no modified outfits or mounts
+	player->setOutfitsModified(false);
+	player->setMountsModified(false);
 }
 
 void IOLoginDataLoad::loadPlayerSkullSystem(const std::shared_ptr<Player> &player, const DBResult_ptr &result) {
@@ -545,11 +568,9 @@ void IOLoginDataLoad::loadPlayerInventoryItems(const std::shared_ptr<Player> &pl
 		return;
 	}
 
-	bool oldProtocol = g_configManager().getBoolean(OLD_PROTOCOL) && player->getProtocolVersion() < 1200;
 	auto query = fmt::format("SELECT pid, sid, itemtype, count, attributes FROM player_items WHERE player_id = {} ORDER BY sid DESC", player->getGUID());
 
 	ItemsMap inventoryItems;
-	std::vector<std::pair<uint8_t, std::shared_ptr<Container>>> openContainersList;
 	std::vector<std::shared_ptr<Item>> itemsToStartDecaying;
 
 	try {
@@ -583,12 +604,6 @@ void IOLoginDataLoad::loadPlayerInventoryItems(const std::shared_ptr<Player> &pl
 
 				const std::shared_ptr<Container> &itemContainer = item->getContainer();
 				if (itemContainer) {
-					if (!oldProtocol) {
-						auto cid = item->getAttribute<int64_t>(ItemAttribute_t::OPENCONTAINER);
-						if (cid > 0) {
-							openContainersList.emplace_back(cid, itemContainer);
-						}
-					}
 					for (const bool isLootContainer : { true, false }) {
 						const auto checkAttribute = isLootContainer ? ItemAttribute_t::QUICKLOOTCONTAINER : ItemAttribute_t::OBTAINCONTAINER;
 						if (item->hasAttribute(checkAttribute)) {
@@ -609,18 +624,6 @@ void IOLoginDataLoad::loadPlayerInventoryItems(const std::shared_ptr<Player> &pl
 		for (const auto &item : itemsToStartDecaying) {
 			item->startDecaying();
 		}
-
-		if (!oldProtocol) {
-			std::ranges::sort(openContainersList.begin(), openContainersList.end(), [](const std::pair<uint8_t, std::shared_ptr<Container>> &left, const std::pair<uint8_t, std::shared_ptr<Container>> &right) {
-				return left.first < right.first;
-			});
-
-			for (auto &it : openContainersList) {
-				player->addContainer(it.first - 1, it.second);
-				player->onSendContainer(it.second);
-			}
-		}
-
 	} catch (const std::exception &e) {
 		g_logger().error("[IOLoginDataLoad::loadPlayerInventoryItems] - Exception during inventory loading: {}", e.what());
 	}
@@ -1037,4 +1040,56 @@ void IOLoginDataLoad::loadPlayerUpdateSystem(const std::shared_ptr<Player> &play
 	player->updateBaseSpeed();
 	player->updateInventoryWeight();
 	player->updateItemsLight(true);
+}
+
+void IOLoginDataLoad::loadPlayerWeaponProficiency(const std::shared_ptr<Player> &player, const DBResult_ptr &result) {
+	if (!result || !player) {
+		g_logger().warn("[{}] - Player or Result nullptr", __FUNCTION__);
+		return;
+	}
+
+	unsigned long blobSize;
+	const char* blob = result->getStream("weapon_proficiencies", blobSize);
+
+	PropStream stream;
+	stream.init(blob, blobSize);
+
+	player->weaponProficiencies.clear();
+
+	uint16_t mapSize;
+	if (!stream.read<uint16_t>(mapSize)) {
+		return;
+	}
+
+	for (uint16_t i = 0; i < mapSize; ++i) {
+		uint16_t itemId;
+		if (!stream.read<uint16_t>(itemId)) {
+			break;
+		}
+
+		WeaponProficiencyData data;
+		if (!stream.read<uint32_t>(data.experience)) {
+			break;
+		}
+
+		uint8_t perkCount;
+		if (!stream.read<uint8_t>(perkCount)) {
+			break;
+		}
+
+		for (uint8_t j = 0; j < perkCount; ++j) {
+			WeaponProficiencyPerk perk {};
+			if (!stream.read<uint8_t>(perk.proficiencyLevel)) {
+				break;
+			}
+
+			if (!stream.read<uint8_t>(perk.perkPosition)) {
+				break;
+			}
+
+			data.activePerks.push_back(perk);
+		}
+
+		player->weaponProficiencies[itemId] = std::move(data);
+	}
 }

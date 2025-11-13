@@ -208,6 +208,7 @@ class PlayerFunctions {
 
 	static int luaPlayerChannelSay(lua_State* L);
 	static int luaPlayerOpenChannel(lua_State* L);
+	static int luaPlayerCloseChannel(lua_State* L);
 
 	static int luaPlayerGetSlotItem(lua_State* L);
 
@@ -229,6 +230,10 @@ class PlayerFunctions {
 	static int luaPlayerHasFamiliar(lua_State* L);
 	static int luaPlayerSetFamiliarLooktype(lua_State* L);
 	static int luaPlayerGetFamiliarLooktype(lua_State* L);
+
+	// Emblem/relations updates
+	static int luaPlayerSendCreatureEmblem(lua_State* L);
+	static int luaPlayerReloadGuildWarList(lua_State* L);
 
 	static int luaPlayerGetPremiumDays(lua_State* L);
 	static int luaPlayerAddPremiumDays(lua_State* L);
@@ -269,8 +274,10 @@ class PlayerFunctions {
 	static int luaPlayerGetClient(lua_State* L);
 
 	static int luaPlayerGetHouse(lua_State* L);
+	static int luaPlayerGetAllHouses(lua_State* L);
 	static int luaPlayerSendHouseWindow(lua_State* L);
 	static int luaPlayerSetEditHouse(lua_State* L);
+	static int luaPlayerSendHouseAuctionMessage(lua_State* L);
 
 	static int luaPlayerSetGhostMode(lua_State* L);
 
@@ -404,6 +411,25 @@ class PlayerFunctions {
 	static int luaPlayerAddAnimusMastery(lua_State* L);
 	static int luaPlayerRemoveAnimusMastery(lua_State* L);
 	static int luaPlayerHasAnimusMastery(lua_State* L);
+
+	static int luaPlayerGetHarmony(lua_State* L);
+	static int luaPlayerSetHarmony(lua_State* L);
+	static int luaPlayerAddHarmony(lua_State* L);
+	static int luaPlayerRemoveHarmony(lua_State* L);
+	static int luaPlayerIsSerene(lua_State* L);
+	static int luaPlayerSetSerene(lua_State* L);
+	static int luaPlayerSetSereneCooldown(lua_State* L);
+	static int luaPlayerGetVirtue(lua_State* L);
+	static int luaPlayerSetVirtue(lua_State* L);
+
+	static int luaPlayerApplyImbuementScrollToItem(lua_State* L);
+	static int luaPlayerOnClearAllImbuementsOnEtcher(lua_State* L);
+	static int luaPlayerSendWeaponProficiencyExperience(lua_State* L);
+
+	static int luaPlayerGetMapShader(lua_State* L);
+	static int luaPlayerSetMapShader(lua_State* L);
+	static int luaPlayerAddCustomOutfit(lua_State* L);
+	static int luaPlayerRemoveCustomOutfit(lua_State* L);
 
 	friend class CreatureFunctions;
 };

@@ -230,6 +230,7 @@ void PlayerFunctions::init(lua_State* L) {
 	Lua::registerMethod(L, "Player", "sendPrivateMessage", PlayerFunctions::luaPlayerSendPrivateMessage);
 	Lua::registerMethod(L, "Player", "channelSay", PlayerFunctions::luaPlayerChannelSay);
 	Lua::registerMethod(L, "Player", "openChannel", PlayerFunctions::luaPlayerOpenChannel);
+	Lua::registerMethod(L, "Player", "closeChannel", PlayerFunctions::luaPlayerCloseChannel);
 
 	Lua::registerMethod(L, "Player", "getSlotItem", PlayerFunctions::luaPlayerGetSlotItem);
 
@@ -251,6 +252,10 @@ void PlayerFunctions::init(lua_State* L) {
 	Lua::registerMethod(L, "Player", "hasFamiliar", PlayerFunctions::luaPlayerHasFamiliar);
 	Lua::registerMethod(L, "Player", "setFamiliarLooktype", PlayerFunctions::luaPlayerSetFamiliarLooktype);
 	Lua::registerMethod(L, "Player", "getFamiliarLooktype", PlayerFunctions::luaPlayerGetFamiliarLooktype);
+
+	// Emblem/relations updates
+	Lua::registerMethod(L, "Player", "sendCreatureEmblem", PlayerFunctions::luaPlayerSendCreatureEmblem);
+	Lua::registerMethod(L, "Player", "reloadGuildWarList", PlayerFunctions::luaPlayerReloadGuildWarList);
 
 	Lua::registerMethod(L, "Player", "getPremiumDays", PlayerFunctions::luaPlayerGetPremiumDays);
 	Lua::registerMethod(L, "Player", "addPremiumDays", PlayerFunctions::luaPlayerAddPremiumDays);
@@ -289,8 +294,10 @@ void PlayerFunctions::init(lua_State* L) {
 	Lua::registerMethod(L, "Player", "getClient", PlayerFunctions::luaPlayerGetClient);
 
 	Lua::registerMethod(L, "Player", "getHouse", PlayerFunctions::luaPlayerGetHouse);
+	Lua::registerMethod(L, "Player", "getAllHouses", PlayerFunctions::luaPlayerGetAllHouses);
 	Lua::registerMethod(L, "Player", "sendHouseWindow", PlayerFunctions::luaPlayerSendHouseWindow);
 	Lua::registerMethod(L, "Player", "setEditHouse", PlayerFunctions::luaPlayerSetEditHouse);
+	Lua::registerMethod(L, "Player", "sendHouseAuctionMessage", PlayerFunctions::luaPlayerSendHouseAuctionMessage);
 
 	Lua::registerMethod(L, "Player", "setGhostMode", PlayerFunctions::luaPlayerSetGhostMode);
 
@@ -429,11 +436,60 @@ void PlayerFunctions::init(lua_State* L) {
 	Lua::registerMethod(L, "Player", "removeAnimusMastery", PlayerFunctions::luaPlayerRemoveAnimusMastery);
 	Lua::registerMethod(L, "Player", "hasAnimusMastery", PlayerFunctions::luaPlayerHasAnimusMastery);
 
+	Lua::registerMethod(L, "Player", "getHarmony", PlayerFunctions::luaPlayerGetHarmony);
+	Lua::registerMethod(L, "Player", "setHarmony", PlayerFunctions::luaPlayerSetHarmony);
+	Lua::registerMethod(L, "Player", "addHarmony", PlayerFunctions::luaPlayerAddHarmony);
+	Lua::registerMethod(L, "Player", "removeHarmony", PlayerFunctions::luaPlayerAddHarmony);
+	Lua::registerMethod(L, "Player", "isSerene", PlayerFunctions::luaPlayerIsSerene);
+	Lua::registerMethod(L, "Player", "setSerene", PlayerFunctions::luaPlayerSetSerene);
+	Lua::registerMethod(L, "Player", "setSereneCooldown", PlayerFunctions::luaPlayerSetSereneCooldown);
+	Lua::registerMethod(L, "Player", "getVirtue", PlayerFunctions::luaPlayerGetVirtue);
+	Lua::registerMethod(L, "Player", "setVirtue", PlayerFunctions::luaPlayerSetVirtue);
+
+	Lua::registerMethod(L, "Player", "applyImbuementScrollToItem", PlayerFunctions::luaPlayerApplyImbuementScrollToItem);
+	Lua::registerMethod(L, "Player", "onClearAllImbuementsOnEtcher", PlayerFunctions::luaPlayerOnClearAllImbuementsOnEtcher);
+	Lua::registerMethod(L, "Player", "sendWeaponProficiencyExperience", PlayerFunctions::luaPlayerSendWeaponProficiencyExperience);
+
+	// OTCR Features
+	Lua::registerMethod(L, "Player", "getMapShader", PlayerFunctions::luaPlayerGetMapShader);
+	Lua::registerMethod(L, "Player", "setMapShader", PlayerFunctions::luaPlayerSetMapShader);
+	Lua::registerMethod(L, "Player", "removeCustomOutfit", PlayerFunctions::luaPlayerRemoveCustomOutfit);
+	Lua::registerMethod(L, "Player", "addCustomOutfit", PlayerFunctions::luaPlayerAddCustomOutfit);
+
 	GroupFunctions::init(L);
 	GuildFunctions::init(L);
 	MountFunctions::init(L);
 	PartyFunctions::init(L);
 	VocationFunctions::init(L);
+}
+
+int PlayerFunctions::luaPlayerSendCreatureEmblem(lua_State* L) {
+	// player:sendCreatureEmblem(creature)
+	const auto &player = Lua::getPlayer(L, 1);
+	if (!player) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_PLAYER_NOT_FOUND));
+		return 1;
+	}
+	const auto &creature = Lua::getCreature(L, 2);
+	if (!creature) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_CREATURE_NOT_FOUND));
+		return 1;
+	}
+	player->sendCreatureEmblem(creature);
+	Lua::pushBoolean(L, true);
+	return 1;
+}
+
+int PlayerFunctions::luaPlayerReloadGuildWarList(lua_State* L) {
+	// player:reloadGuildWarList()
+	const auto &player = Lua::getPlayer(L, 1);
+	if (!player) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_PLAYER_NOT_FOUND));
+		return 1;
+	}
+	player->reloadGuildWarList();
+	Lua::pushBoolean(L, true);
+	return 1;
 }
 
 int PlayerFunctions::luaPlayerSendInventory(lua_State* L) {
@@ -2727,6 +2783,19 @@ int PlayerFunctions::luaPlayerOpenChannel(lua_State* L) {
 	return 1;
 }
 
+int PlayerFunctions::luaPlayerCloseChannel(lua_State* L) {
+	// player:closeChannel(channelId)
+	const uint16_t channelId = Lua::getNumber<uint16_t>(L, 2);
+	const auto &player = Lua::getUserdataShared<Player>(L, 1);
+	if (player) {
+		g_game().playerCloseChannel(player->getID(), channelId);
+		Lua::pushBoolean(L, true);
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
 int PlayerFunctions::luaPlayerGetSlotItem(lua_State* L) {
 	// player:getSlotItem(slot)
 	const auto &player = Lua::getUserdataShared<Player>(L, 1);
@@ -2867,9 +2936,9 @@ int PlayerFunctions::luaPlayerAddMount(lua_State* L) {
 		return 1;
 	}
 
-	uint8_t mountId;
+	uint16_t mountId;
 	if (Lua::isNumber(L, 2)) {
-		mountId = Lua::getNumber<uint8_t>(L, 2);
+		mountId = Lua::getNumber<uint16_t>(L, 2);
 	} else {
 		const auto &mount = g_game().mounts->getMountByName(Lua::getString(L, 2));
 		if (!mount) {
@@ -2890,9 +2959,9 @@ int PlayerFunctions::luaPlayerRemoveMount(lua_State* L) {
 		return 1;
 	}
 
-	uint8_t mountId;
+	uint16_t mountId;
 	if (Lua::isNumber(L, 2)) {
-		mountId = Lua::getNumber<uint8_t>(L, 2);
+		mountId = Lua::getNumber<uint16_t>(L, 2);
 	} else {
 		const auto &mount = g_game().mounts->getMountByName(Lua::getString(L, 2));
 		if (!mount) {
@@ -3369,14 +3438,7 @@ int PlayerFunctions::luaPlayerOpenImbuementWindow(lua_State* L) {
 		return 1;
 	}
 
-	const auto &item = Lua::getUserdataShared<Item>(L, 2);
-	if (!item) {
-		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_ITEM_NOT_FOUND));
-		Lua::pushBoolean(L, false);
-		return 1;
-	}
-
-	player->openImbuementWindow(item);
+	player->openImbuementWindow(IMBUEMENT_WINDOW_CHOICE);
 	return 1;
 }
 
@@ -3474,6 +3536,47 @@ int PlayerFunctions::luaPlayerGetHouse(lua_State* L) {
 	} else {
 		lua_pushnil(L);
 	}
+	return 1;
+}
+
+int PlayerFunctions::luaPlayerGetAllHouses(lua_State* L) {
+	// player:getAllHouses()
+	const auto &player = Lua::getUserdataShared<Player>(L, 1);
+	if (!player) {
+		lua_pushnil(L);
+		return 1;
+	}
+
+	auto houses = g_game().map.houses.getAllHousesByPlayerId(player->getGUID());
+	lua_newtable(L);
+	int index = 1;
+	for (const auto &house : houses) {
+		if (house) {
+			lua_pushnumber(L, index++);
+			Lua::pushUserdata<House>(L, house);
+			Lua::setMetatable(L, -1, "House");
+			lua_settable(L, -3);
+		}
+	}
+
+	return 1;
+}
+
+int PlayerFunctions::luaPlayerSendHouseAuctionMessage(lua_State* L) {
+	// player:sendHouseAuctionMessage(houseId, type, index, bidSuccess)
+	const auto &player = Lua::getUserdataShared<Player>(L, 1);
+	if (!player) {
+		lua_pushnil(L);
+		return 1;
+	}
+
+	uint32_t houseId = Lua::getNumber<uint32_t>(L, 2);
+	uint8_t type = Lua::getNumber<uint8_t>(L, 3);
+	uint8_t index = Lua::getNumber<uint8_t>(L, 4);
+	bool bidSuccess = Lua::getBoolean(L, 5, false);
+	player->sendHouseAuctionMessage(houseId, static_cast<HouseAuctionType>(type), index, bidSuccess);
+
+	lua_pushboolean(L, true);
 	return 1;
 }
 
@@ -5059,5 +5162,277 @@ int PlayerFunctions::luaPlayerRemoveDeflectCondition(lua_State* L) {
 	auto deflectChance = Lua::getNumber<uint8_t>(L, 4);
 	player->removeDeflectCondition(source, conditionType, deflectChance);
 	Lua::pushBoolean(L, true);
+	return 1;
+}
+
+int PlayerFunctions::luaPlayerGetHarmony(lua_State* L) {
+	// player:getHarmony()
+	const auto &player = Lua::getUserdataShared<Player>(L, 1);
+	if (!player) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_PLAYER_NOT_FOUND));
+		lua_pushnil(L);
+		return 0;
+	}
+
+	lua_pushnumber(L, player->getHarmony());
+
+	return 1;
+}
+
+int PlayerFunctions::luaPlayerSetHarmony(lua_State* L) {
+	// player:setHarmony(harmony)
+	const auto &player = Lua::getUserdataShared<Player>(L, 1);
+	if (!player) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_PLAYER_NOT_FOUND));
+		lua_pushnil(L);
+		return 0;
+	}
+
+	player->setHarmony(Lua::getNumber<uint8_t>(L, 2, 0));
+
+	Lua::pushBoolean(L, true);
+	return 1;
+}
+
+int PlayerFunctions::luaPlayerAddHarmony(lua_State* L) {
+	// player:addHarmony(harmony)
+	const auto &player = Lua::getUserdataShared<Player>(L, 1);
+	if (!player) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_PLAYER_NOT_FOUND));
+		lua_pushnil(L);
+		return 0;
+	}
+
+	player->addHarmony(Lua::getNumber<uint8_t>(L, 2, 0));
+
+	Lua::pushBoolean(L, true);
+	return 1;
+}
+
+int PlayerFunctions::luaPlayerRemoveHarmony(lua_State* L) {
+	// player:removeHarmony(harmony)
+	const auto &player = Lua::getUserdataShared<Player>(L, 1);
+	if (!player) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_PLAYER_NOT_FOUND));
+		lua_pushnil(L);
+		return 0;
+	}
+
+	player->removeHarmony(Lua::getNumber<uint8_t>(L, 2, 0));
+	Lua::pushBoolean(L, true);
+	return 1;
+}
+
+int PlayerFunctions::luaPlayerIsSerene(lua_State* L) {
+	// player:isSerene()
+	const auto &player = Lua::getUserdataShared<Player>(L, 1);
+	if (!player) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_PLAYER_NOT_FOUND));
+		lua_pushnil(L);
+		return 0;
+	}
+
+	Lua::pushBoolean(L, player->isSerene());
+	return 1;
+}
+
+int PlayerFunctions::luaPlayerSetSerene(lua_State* L) {
+	// player:setSerene(serene)
+	const auto &player = Lua::getUserdataShared<Player>(L, 1);
+	if (!player) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_PLAYER_NOT_FOUND));
+		lua_pushnil(L);
+		return 0;
+	}
+
+	player->setSerene(Lua::getBoolean(L, 2, true));
+	Lua::pushBoolean(L, true);
+	return 1;
+}
+
+int PlayerFunctions::luaPlayerSetSereneCooldown(lua_State* L) {
+	// player:setSereneCooldown(addTime)
+	const auto &player = Lua::getUserdataShared<Player>(L, 1);
+	if (!player) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_PLAYER_NOT_FOUND));
+		lua_pushnil(L);
+		return 0;
+	}
+
+	player->setSereneCooldown(Lua::getNumber<uint64_t>(L, 2, 0));
+
+	Lua::pushBoolean(L, true);
+	return 1;
+}
+
+int PlayerFunctions::luaPlayerGetVirtue(lua_State* L) {
+	// player:getVirtue()
+	const auto &player = Lua::getUserdataShared<Player>(L, 1);
+	if (!player) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_PLAYER_NOT_FOUND));
+		lua_pushnil(L);
+		return 1;
+	}
+
+	lua_pushnumber(L, static_cast<uint8_t>(player->getVirtue()));
+	return 1;
+}
+
+int PlayerFunctions::luaPlayerSetVirtue(lua_State* L) {
+	// player:setVirtue(virtueType)
+	const auto &player = Lua::getUserdataShared<Player>(L, 1);
+	if (!player) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_PLAYER_NOT_FOUND));
+		lua_pushnil(L);
+		return 1;
+	}
+
+	const uint8_t virtueValue = Lua::getNumber<uint8_t>(L, 2, 0);
+	const VirtueMonk_t virtue = static_cast<VirtueMonk_t>(virtueValue);
+
+	if (virtue == VIRTUE_HARMONY || virtue == VIRTUE_JUSTICE || virtue == VIRTUE_SUSTAIN) {
+		player->setVirtue(virtue);
+		lua_pushboolean(L, true);
+	} else {
+		player->setVirtue(VIRTUE_NONE);
+		lua_pushboolean(L, false);
+	}
+
+	return 1;
+}
+
+int PlayerFunctions::luaPlayerApplyImbuementScrollToItem(lua_State* L) {
+	// player:applyImbuementScrollToItem(scrollId, item)
+	const auto &player = Lua::getUserdataShared<Player>(L, 1);
+	if (!player) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_PLAYER_NOT_FOUND));
+		Lua::pushBoolean(L, false);
+		return 1;
+	}
+
+	const uint16_t scrollId = Lua::getNumber<uint16_t>(L, 2, 0);
+	if (scrollId == 0) {
+		Lua::pushBoolean(L, false);
+		return 1;
+	}
+
+	const auto &item = Lua::getUserdataShared<Item>(L, 3);
+	if (!item) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_ITEM_NOT_FOUND));
+		Lua::pushBoolean(L, false);
+		return 1;
+	}
+
+	player->applyImbuementScrollToItem(scrollId, item);
+	return 1;
+}
+
+int PlayerFunctions::luaPlayerOnClearAllImbuementsOnEtcher(lua_State* L) {
+	// player:onClearAllImbuementsOnEtcher(item)
+	const auto &player = Lua::getUserdataShared<Player>(L, 1);
+	if (!player) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_PLAYER_NOT_FOUND));
+		Lua::pushBoolean(L, false);
+		return 1;
+	}
+
+	const auto &item = Lua::getUserdataShared<Item>(L, 2);
+	if (!item) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_ITEM_NOT_FOUND));
+		Lua::pushBoolean(L, false);
+		return 1;
+	}
+
+	player->onClearAllImbuementsOnEtcher(item);
+	Lua::pushBoolean(L, true);
+	return 1;
+}
+
+int PlayerFunctions::luaPlayerSendWeaponProficiencyExperience(lua_State* L) {
+	// player:sendWeaponProficiencyExperience(item)
+	const auto &player = Lua::getUserdataShared<Player>(L, 1);
+	if (!player) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_PLAYER_NOT_FOUND));
+		Lua::pushBoolean(L, false);
+		return 1;
+	}
+
+	const uint16_t itemId = Lua::getNumber<uint16_t>(L, 2, 0);
+	const uint32_t addProficiencyExperience = Lua::getNumber<uint32_t>(L, 3, 0);
+
+	player->sendWeaponProficiencyExperience(itemId, addProficiencyExperience);
+	Lua::pushBoolean(L, true);
+	return 1;
+}
+
+int PlayerFunctions::luaPlayerGetMapShader(lua_State* L) {
+	// player:getMapShader()
+	const auto &player = Lua::getUserdataShared<Player>(L, 1);
+	if (!player) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_PLAYER_NOT_FOUND));
+		Lua::pushBoolean(L, false);
+		return 0;
+	}
+
+	Lua::pushString(L, player->attachedEffects().getMapShader());
+	return 1;
+}
+
+int PlayerFunctions::luaPlayerSetMapShader(lua_State* L) {
+	// player:setMapShader(shaderName, [temporary])
+	const auto &player = Lua::getUserdataShared<Player>(L, 1);
+	if (!player) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_PLAYER_NOT_FOUND));
+		Lua::pushBoolean(L, false);
+		return 0;
+	}
+	const auto shaderName = Lua::getString(L, 2);
+	player->attachedEffects().setMapShader(shaderName);
+	player->attachedEffects().sendMapShader(shaderName);
+	Lua::pushBoolean(L, true);
+	return 1;
+}
+
+int PlayerFunctions::luaPlayerAddCustomOutfit(lua_State* L) {
+	// player:addCustomOutfit(type, id or name)
+	const auto &player = Lua::getUserdataShared<Player>(L, 1);
+	if (!player) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_PLAYER_NOT_FOUND));
+		Lua::pushBoolean(L, false);
+		return 0;
+	}
+
+	std::string type = Lua::getString(L, 2);
+	std::variant<uint16_t, std::string> idOrName;
+
+	if (Lua::isNumber(L, 3)) {
+		idOrName = Lua::getNumber<uint16_t>(L, 3);
+	} else {
+		idOrName = Lua::getString(L, 3);
+	}
+
+	Lua::pushBoolean(L, player->attachedEffects().addCustomOutfit(type, idOrName));
+	return 1;
+}
+
+int PlayerFunctions::luaPlayerRemoveCustomOutfit(lua_State* L) {
+	// player:removeCustomOutfit(type, id or name)
+	const auto &player = Lua::getUserdataShared<Player>(L, 1);
+	if (!player) {
+		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_PLAYER_NOT_FOUND));
+		Lua::pushBoolean(L, false);
+		return 0;
+	}
+
+	std::string type = Lua::getString(L, 2);
+	std::variant<uint16_t, std::string> idOrName;
+
+	if (Lua::isNumber(L, 3)) {
+		idOrName = Lua::getNumber<uint16_t>(L, 3);
+	} else {
+		idOrName = Lua::getString(L, 3);
+	}
+
+	Lua::pushBoolean(L, player->attachedEffects().removeCustomOutfit(type, idOrName));
 	return 1;
 }

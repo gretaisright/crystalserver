@@ -99,7 +99,7 @@ TalkActionResult_t Spells::playerSaySpell(const std::shared_ptr<Player> &player,
 	}
 
 	if (instantSpell->playerCastInstant(player, param)) {
-		if (!player->checkSpellNameInsteadOfWords()) {
+		if (!g_configManager().getBoolean(SPELL_NAME_INSTEAD_WORDS)) {
 			words = instantSpell->getWords();
 		} else {
 			words = instantSpell->getName();
@@ -508,6 +508,12 @@ bool Spell::playerSpellCheck(const std::shared_ptr<Player> &player) const {
 		return false;
 	}
 
+	if (harmony && player->getHarmony() == 0 && !player->hasFlag(PlayerFlags_t::HasInfiniteHarmony)) {
+		player->sendCancelMessage(RETURNVALUE_NOTENOUGHHARMONY);
+		g_game().addMagicEffect(player->getPosition(), CONST_ME_POFF);
+		return false;
+	}
+
 	if (isInstant() && getNeedLearn()) {
 		if (!player->hasLearnedInstantSpell(getName())) {
 			player->sendCancelMessage(RETURNVALUE_YOUNEEDTOLEARNTHISSPELL);
@@ -525,6 +531,7 @@ bool Spell::playerSpellCheck(const std::shared_ptr<Player> &player) const {
 			case WEAPON_SWORD:
 			case WEAPON_CLUB:
 			case WEAPON_AXE:
+			case WEAPON_FIST:
 				break;
 
 			default: {
@@ -706,19 +713,56 @@ void Spell::getCombatDataAugment(const std::shared_ptr<Player> &player, CombatDa
 				if (
 					augment->type == Augment_t::IncreasedDamage || augment->type == Augment_t::PowerfulImpact || augment->type == Augment_t::StrongImpact || augment->type == Augment_t::Base
 				) {
-					const float augmentPercent = augment->value / 100.0;
+					const float augmentPercent = augment->value / 10000.0f;
 					damage.primary.value += static_cast<int32_t>(damage.primary.value * augmentPercent);
 					damage.secondary.value += static_cast<int32_t>(damage.secondary.value * augmentPercent);
 				} else if (augment->type != Augment_t::Cooldown) {
-					const int32_t augmentValue = augment->value * 100;
-					damage.lifeLeech += augment->type == Augment_t::LifeLeech ? augmentValue : 0;
-					damage.manaLeech += augment->type == Augment_t::ManaLeech ? augmentValue : 0;
-					damage.criticalDamage += augment->type == Augment_t::CriticalExtraDamage ? augmentValue : 0;
+					damage.lifeLeech += augment->type == Augment_t::LifeLeech ? augment->value : 0;
+					damage.manaLeech += augment->type == Augment_t::ManaLeech ? augment->value : 0;
+					damage.criticalDamage += augment->type == Augment_t::CriticalExtraDamage ? augment->value : 0;
+					damage.criticalChance += augment->type == Augment_t::CriticalHitChance ? augment->value : 0;
+				}
+			}
+		}
+
+		for (const auto &playerProficiencyAugment : player->getEquippedWeaponProficiency().spellAugments) {
+			if (playerProficiencyAugment.spellId == getSpellId()) {
+				if (playerProficiencyAugment.value == 0) {
+					continue;
+				}
+
+				switch (playerProficiencyAugment.augmentType) {
+					case PROFICIENCY_AUGMENTTYPE_BASE_DAMAGE: {
+						const float augmentPercent = playerProficiencyAugment.value;
+						damage.primary.value += static_cast<int32_t>(damage.primary.value * augmentPercent);
+						damage.secondary.value += static_cast<int32_t>(damage.secondary.value * augmentPercent);
+						break;
+					}
+					case PROFICIENCY_AUGMENTTYPE_LIFE_LEECH: {
+						const int32_t augmentValueLifeLeech = playerProficiencyAugment.value * 1000;
+						damage.lifeLeech += augmentValueLifeLeech;
+						break;
+					}
+					case PROFICIENCY_AUGMENTTYPE_MANA_LEECH: {
+						const int32_t augmentValueManaLeech = playerProficiencyAugment.value * 1000;
+						damage.manaLeech += augmentValueManaLeech;
+						break;
+					}
+					case PROFICIENCY_AUGMENTTYPE_CRITICAL_EXTRA_DAMAGE: {
+						const int32_t augmentValueCriticalDamage = playerProficiencyAugment.value * 1000;
+						damage.criticalDamage += augmentValueCriticalDamage;
+						break;
+					}
+					case PROFICIENCY_AUGMENTTYPE_CRITICAL_HIT_CHANCE: {
+						const int32_t augmentValueCriticalChance = playerProficiencyAugment.value * 1000;
+						damage.criticalChance += augmentValueCriticalChance;
+						break;
+					}
 				}
 			}
 		}
 	}
-};
+}
 
 int32_t Spell::calculateAugmentSpellCooldownReduction(const std::shared_ptr<Player> &player) const {
 	int32_t spellCooldown = 0;
@@ -727,6 +771,15 @@ int32_t Spell::calculateAugmentSpellCooldownReduction(const std::shared_ptr<Play
 		const auto augments = item->getAugmentsBySpellNameAndType(getName(), Augment_t::Cooldown);
 		for (const auto &augment : augments) {
 			spellCooldown += augment->value;
+		}
+	}
+
+	for (const auto &playerProficiencyAugment : player->getEquippedWeaponProficiency().spellAugments) {
+		if (playerProficiencyAugment.spellId == getSpellId()) {
+			if (playerProficiencyAugment.augmentType == PROFICIENCY_AUGMENTTYPE_COOLDOWN) {
+				const int32_t augmentValue = playerProficiencyAugment.value * 1;
+				spellCooldown += augmentValue;
+			}
 		}
 	}
 
@@ -818,11 +871,11 @@ void Spell::postCastSpell(const std::shared_ptr<Player> &player, bool finishedCa
 	}
 
 	if (payCost) {
-		postCastSpell(player, getManaCost(player), getSoulCost());
+		postCastSpell(player, getManaCost(player), getSoulCost(), getHarmonyCost());
 	}
 }
 
-void Spell::postCastSpell(const std::shared_ptr<Player> &player, uint32_t manaCost, uint32_t soulCost) {
+void Spell::postCastSpell(const std::shared_ptr<Player> &player, uint32_t manaCost, uint32_t soulCost, uint8_t harmonyCost) {
 	if (manaCost > 0) {
 		player->addManaSpent(manaCost);
 		player->changeMana(-static_cast<int32_t>(manaCost));
@@ -832,6 +885,10 @@ void Spell::postCastSpell(const std::shared_ptr<Player> &player, uint32_t manaCo
 		if (soulCost > 0) {
 			player->changeSoul(-static_cast<int32_t>(soulCost));
 		}
+	}
+
+	if (harmonyCost) {
+		player->setHarmony(0);
 	}
 }
 
@@ -1064,7 +1121,32 @@ void Spell::setLockedPZ(bool b) {
 	pzLocked = b;
 }
 
+bool Spell::getHarmonyCost() const {
+	return harmony;
+}
+
+void Spell::setHarmonyCost(bool h) {
+	harmony = h;
+}
+
 InstantSpell::InstantSpell() = default;
+
+static Direction getStraightDirectionTo(const Position &from, const Position &to) {
+	if (from == to) {
+		return DIRECTION_NONE;
+	}
+
+	const int_fast32_t dx = Position::getOffsetX(from, to);
+	const int_fast32_t dy = Position::getOffsetY(from, to);
+
+	if (std::abs(dx) >= std::abs(dy)) {
+		return dx > 0 ? DIRECTION_WEST : DIRECTION_EAST;
+	} else {
+		return dy > 0 ? DIRECTION_NORTH : DIRECTION_SOUTH;
+	}
+
+	return DIRECTION_NONE;
+}
 
 bool InstantSpell::playerCastInstant(const std::shared_ptr<Player> &player, std::string &param) const {
 	if (!playerSpellCheck(player)) {
@@ -1162,8 +1244,19 @@ bool InstantSpell::playerCastInstant(const std::shared_ptr<Player> &player, std:
 	} else {
 		var.type = VARIANT_POSITION;
 
-		if (needDirection) {
-			var.pos = Spells::getCasterPosition(player, player->getDirection());
+		if (needDirection) { // bool to aim at target
+			const std::shared_ptr<Creature> &target = player->getAttackedCreature();
+			if (target && !target->isRemoved() && target->getHealth() > 0) {
+				const auto it = player->spellActivedAimMap.find(getSpellId());
+				if (it != player->spellActivedAimMap.end() && it->second == 1) {
+					Direction dir = getStraightDirectionTo(player->getPosition(), target->getPosition());
+					var.pos = Spells::getCasterPosition(player, dir);
+				} else {
+					var.pos = Spells::getCasterPosition(player, player->getDirection());
+				}
+			} else {
+				var.pos = Spells::getCasterPosition(player, player->getDirection());
+			}
 		} else {
 			var.pos = player->getPosition();
 		}

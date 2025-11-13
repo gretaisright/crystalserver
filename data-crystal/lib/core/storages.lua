@@ -23,6 +23,7 @@ Reserved player action storage key ranges (const.hpp)
 
 Storage = {
 	-- Crystal Server storages
+	FreeQuests = 30057,
 	CrystalServer = {
 		Citizen = {
 			DesertCity = 9056,
@@ -30,48 +31,14 @@ Storage = {
 			Venore = 9058,
 			Karmia = 9059,
 			Tiquanda = 9060,
-			PremiumIsland = 9061,
+			Thyranox = 9061,
 			Folda = 9062,
 			LibertyBay = 9063,
+			Frostania = 9064,
 		},
 		AdventurersGuild = {
 			Stone = 52130,
 			FreeStone = 52131,
-		},
-		IceCity = { -- update 8.0 - Reserved Storages 41151 - 41350
-			BarbarianArena = {
-				Arena = 41151,
-				PitDoor = 41152,
-				QuestLogGreenhorn = 41153,
-				QuestLogScrapper = 41154,
-				QuestLogWarlord = 41155,
-				RewardGreenhorn = 41156,
-				RewardGreenhornWeapons = 41157,
-				RewardGreenhornBP = 41158,
-				RewardGreenhornPresent = 41159,
-				RewardScrapper = 41160,
-				RewardScrapperWeapons = 41161,
-				RewardScrapperBP = 41162,
-				RewardScrapperPresent = 41163,
-				RewardWarlord = 41164,
-				RewardWarlordWeapons = 41165,
-				RewardWarlordBP = 41166,
-				RewardWarlordPresent = 41167,
-				TrophyGreenhorn = 41168,
-				TrophyScrapper = 41169,
-				TrophyWarlord = 41170,
-				GreenhornDoor = 41171,
-				ScrapperDoor = 41172,
-				WarlordDoor = 41173,
-			},
-			BarbarianTest = {
-				Questline = 41174,
-				Mission01 = 41175,
-				Mission02 = 41176,
-				Mission03 = 41177,
-				MeadTotalSips = 41178,
-				MeadSuccessSips = 41179,
-			},
 		},
 		Quests = {
 			Behemoth = {
@@ -120,7 +87,6 @@ Storage = {
 			S2 = 4559,
 		},
 	},
-
 	Quest = {
 		Key = {
 			ID1000 = 103,
@@ -129,8 +95,56 @@ Storage = {
 			Example = 9000,
 			Door = 9001,
 		},
-
-		-- DODAJEMY DEMON OAK TUTAJ
+		U7_8 = {
+			ThePitsOfInferno = {
+				ShortcutHubDoor = 41017,
+				ShortcutLeverDoor = 41018,
+				Pumin = 41019,
+				ThroneInfernatil = 41020,
+				ThroneTafariel = 41021,
+				ThroneVerminor = 41022,
+				ThroneApocalypse = 41023,
+				ThroneBazir = 41024,
+				ThroneAshfalor = 41025,
+				ThronePumin = 41026,
+				Levers = 41027,
+			},
+		},
+		U8_0 = { -- update 8.0 - Reserved Storages 41151 - 41350
+			BarbarianArena = {
+				Arena = 41151,
+				PitDoor = 41152,
+				QuestLogGreenhorn = 41153,
+				QuestLogScrapper = 41154,
+				QuestLogWarlord = 41155,
+				RewardGreenhorn = 41156,
+				RewardGreenhornWeapons = 41157,
+				RewardGreenhornBP = 41158,
+				RewardGreenhornPresent = 41159,
+				RewardScrapper = 41160,
+				RewardScrapperWeapons = 41161,
+				RewardScrapperBP = 41162,
+				RewardScrapperPresent = 41163,
+				RewardWarlord = 41164,
+				RewardWarlordWeapons = 41165,
+				RewardWarlordBP = 41166,
+				RewardWarlordPresent = 41167,
+				TrophyGreenhorn = 41168,
+				TrophyScrapper = 41169,
+				TrophyWarlord = 41170,
+				GreenhornDoor = 41171,
+				ScrapperDoor = 41172,
+				WarlordDoor = 41173,
+			},
+			TheInquisitionQuest = {
+				Questline = 41691,
+				Mission07 = 41698,
+				RewardDoor = 41699,
+				EnterTeleport = 41706,
+				Reward = 41707,
+				RewardRoomText = 41708,
+			},
+		},
 		U8_2 = {
 			TheDemonOak = {
 				AxeBlowsBird = 10001,

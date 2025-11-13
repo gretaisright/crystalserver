@@ -184,7 +184,7 @@ private:
 	void parseHighscores(NetworkMessage &msg);
 	void parseTaskHuntingAction(NetworkMessage &msg);
 	void sendHighscoresNoData();
-	void sendHighscores(const std::vector<HighscoreCharacter> &characters, uint8_t categoryId, uint32_t vocationId, uint16_t page, uint16_t pages, uint32_t updateTimer);
+	void sendHighscores(const std::vector<HighscoreCharacter> &characters, uint8_t categoryId, uint32_t vocationBaseId, uint16_t page, uint16_t pages, uint32_t updateTimer);
 
 	void parseGreet(NetworkMessage &msg);
 	void parseBugReport(NetworkMessage &msg);
@@ -273,7 +273,7 @@ private:
 	void parseCloseChannel(NetworkMessage &msg);
 
 	// Imbuement info
-	void addImbuementInfo(NetworkMessage &msg, uint16_t imbuementId) const;
+	void addImbuementInfo(NetworkMessage &msg, uint16_t imbuementId, bool isScroll) const;
 
 	// Send functions
 	void sendChannelMessage(const std::string &author, const std::string &text, SpeakClasses type, uint16_t channel);
@@ -290,7 +290,7 @@ private:
 	void sendIconBakragore(const IconBakragore icon);
 	void sendFYIBox(const std::string &message);
 
-	void openImbuementWindow(const std::shared_ptr<Item> &item);
+	void openImbuementWindow(const Imbuement_Window_t type, const std::shared_ptr<Item> &item = nullptr);
 	void sendImbuementResult(const std::string &message);
 	void closeImbuementWindow();
 
@@ -453,6 +453,7 @@ private:
 	void sendRemoveContainerItem(uint8_t cid, uint16_t slot, const std::shared_ptr<Item> &lastItem);
 
 	void sendContainer(uint8_t cid, const std::shared_ptr<Container> &container, bool hasParent, uint16_t firstIndex);
+	void sendEmptyContainer(uint8_t cid);
 	void sendCloseContainer(uint8_t cid);
 
 	// quickloot
@@ -515,7 +516,16 @@ private:
 
 	// OTCv8
 	void sendFeatures();
-
+	// OTCR
+	void sendOTCRFeatures();
+	void sendAttachedEffect(const std::shared_ptr<Creature> &creature, uint16_t effectId);
+	void sendDetachEffect(const std::shared_ptr<Creature> &creature, uint16_t effectId);
+	void sendShader(const std::shared_ptr<Creature> &creature, const std::string &shaderName);
+	void sendMapShader(const std::string &shaderName);
+	void sendPlayerTyping(const std::shared_ptr<Creature> &creature, uint8_t typing);
+	void parsePlayerTyping(NetworkMessage &msg);
+	void AddOutfitCustomOTCR(NetworkMessage &msg, const Outfit_t &outfit);
+	void sendOutfitWindowCustomOTCR(NetworkMessage &msg);
 	void parseInventoryImbuements(NetworkMessage &msg);
 	void sendInventoryImbuements(const std::map<Slots_t, std::shared_ptr<Item>> &items);
 
@@ -530,9 +540,20 @@ private:
 	void parseSaveWheel(NetworkMessage &msg);
 	void parseWheelGemAction(NetworkMessage &msg);
 
+	void sendHarmonyProtocol(const uint8_t harmonyValue);
+	void sendSereneProtocol(const bool isSerene);
+	void sendVirtueProtocol(const uint8_t virtueValue);
+	void parseSelectSpellAimProtocol(NetworkMessage &msg);
+
+	void parseImbuementWindow(NetworkMessage &msg);
+	void parseWeaponProficiency(NetworkMessage &msg);
+	void sendWeaponProficiencyExperience(const uint16_t itemId, const uint32_t experience);
+	void sendWeaponProficiencyInfo(const uint16_t itemId);
+
 	friend class Player;
 	friend class PlayerWheel;
 	friend class PlayerVIP;
+	friend class PlayerAttachedEffects;
 
 	std::unordered_set<uint32_t> knownCreatureSet;
 	std::shared_ptr<Player> player = nullptr;
@@ -556,6 +577,7 @@ private:
 
 	uint16_t otclientV8 = 0;
 	bool isOTC = false;
+	bool isOTCR = false;
 
 	void sendOpenStash();
 	void parseStashWithdraw(NetworkMessage &msg);
@@ -567,7 +589,6 @@ private:
 	void sendSingleSoundEffect(const Position &pos, SoundEffect_t id, SourceEffect_t source);
 	void sendDoubleSoundEffect(const Position &pos, SoundEffect_t mainSoundId, SourceEffect_t mainSource, SoundEffect_t secondarySoundId, SourceEffect_t secondarySource);
 
-	void sendHotkeyPreset();
 	void sendTakeScreenshot(Screenshot_t screenshotType);
 	void sendDisableLoginMusic();
 

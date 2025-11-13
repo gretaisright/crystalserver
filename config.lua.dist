@@ -70,6 +70,20 @@ blackSkulledDeathMana = 0
 fieldOwnershipDuration = 5 * 1000
 loginProtectionPeriod = 10 * 1000
 
+-- Guilds
+-- ingameGuildManagement: set true to enable in-game guild commands.
+-- guildWarsDefaultFrags: Default frags for guild war invitations if not specified.
+-- guildWarsMinimunFrags: Minimum frags required to initiate a guild war.
+-- levelToFormGuild: Minimum level required to create a guild.
+-- createGuildOnlyPremium: Only premium players can create guilds.
+ingameGuildManagement = true
+toggleGuildWars = false
+guildWarsDefaultFrags = 100
+guildWarsMinimunFrags = 10
+levelToFormGuild = 8
+createGuildOnlyPremium = true
+
+-- Clean system
 cleanProtectionZones = false
 
 -- Connection Config
@@ -91,6 +105,8 @@ replaceKickOnLogin = true
 maxPacketsPerSecond = 25
 maxPlayersOnlinePerAccount = 1
 maxPlayersOutsidePZPerAccount = 1
+toggleMaxConnectionsByIP = false
+maxIPConnections = 3
 
 -- Packet Compression
 -- Minimize network bandwith and reduce ping
@@ -195,15 +211,14 @@ momentumChanceFormulaA = 0.05
 momentumChanceFormulaB = 1.9
 momentumChanceFormulaC = 0.05
 
-transcendanceChanceFormulaA = 0.0127
-transcendanceChanceFormulaB = 0.1070
-transcendanceChanceFormulaC = 0.0073
+transcendenceChanceFormulaA = 0.0127
+transcendenceChanceFormulaB = 0.1070
+transcendenceChanceFormulaC = 0.0073
+transcendenceAvatarDuration = 7000
 
 amplificationChanceFormulaA = 0.4
 amplificationChanceFormulaB = 1.7
 amplificationChanceFormulaC = 0.4
-
-transcendanceAvatarDuration = 7000
 
 -- Bestiary & Bosstiary system
 -- NOTE: bestiaryKillMultiplier, multiplier value of monster killed, default 1
@@ -283,8 +298,6 @@ tibiadromeConcoctionTickType = "online" -- "online" | "experience"
 onlyPremiumAccount = false
 
 -- Customs
--- NOTE: stashMoving = true, stow an container inside your stash
--- NOTE: depotChest, the non-stackable items will be moved to the selected depot chest(I - XVIII).
 -- NOTE: autoBank = true, the dropped coins from monsters will be automatically deposited to your bank account.
 -- NOTE: toggleGoldPouchAllowAnything will allow players to move items or gold to gold pouch
 -- NOTE: toggleGoldPouchQuickLootOnly will ONLY allow quickloot to move items to gold pouch
@@ -298,8 +311,6 @@ onlyPremiumAccount = false
 -- NOTE: startStreakLevel will make a reward streak level for new players who never logged in
 -- NOTE: if showLootsInBestiary is true, will cause all loots to be shown in the bestiary even if the player has not reached the required number of kills
 -- NOTE: minTownIdToBankTransferFromMain blocks towns less than defined from receiving money transfers
-stashMoving = false
-depotChest = 4
 autoLoot = false
 autoBank = false
 toggleGoldPouchAllowAnything = false
@@ -317,12 +328,18 @@ startStreakLevel = 0
 showLootsInBestiary = false
 minTownIdToBankTransferFromMain = 4
 
+-- Stash
+-- NOTE: stashMoving = true, stow an container inside your stash
+-- NOTE: stashManageAmount = max items add/remove from stash at once
+stashMoving = false
+stashManageAmount = 100000
+
 -- Special tiles and Free Town
 -- NOTE: Special tiles and free town ID are independent.
 -- NOTE: Set toggleSpecialTiles to true if you want to use the system.
 -- NOTE: freeTownId = 8 is Thais city.
 freeTownId = 8
-toggleSpecialTiles = true
+toggleSpecialTiles = false
 
 -- Cosmetics
 -- NOTE: enableSupportOutfit enable GODS and GMS to select support outfit (gamemaster, customer support or community manager)
@@ -409,6 +426,7 @@ houseLoseAfterInactivity = 30 -- days; 0 = never
 onlyInvitedCanMoveHouseItems = true
 togglehouseTransferOnRestart = true
 bedsOnlyPremium = true
+maxHousesLimit = 3
 
 -- Item Usage
 timeBetweenActions = 200
@@ -515,6 +533,7 @@ chainSystemVipOnly = true
 chainSystemModifyMagic = false
 combatChainDelay = 50
 combatChainTargets = 5
+combatChainSkillFormulaFist = 1.0
 combatChainSkillFormulaAxe = 0.9
 combatChainSkillFormulaClub = 0.7
 combatChainSkillFormulaSword = 1.1
@@ -680,8 +699,22 @@ metricsPrometheusAddress = "0.0.0.0:9464"
 metricsEnableOstream = false
 metricsOstreamInterval = 1000
 
--- OTS Statistics (Get more info in: https://github.com/opentibiabr/canary/pull/1692)
+-- OTS Statistics
 -- NOTE: time in seconds: 30 = 30 seconds, 0 = disabled
 statsDumpInterval = 30
 statsSlowLogTime = 10
 statsVerySlowLogTime = 50
+
+-- OTC Features
+-- NOTE: Features added in this list will be forced to be used on OTCR
+-- These features can be found in "modules/gamelib/const.lua"
+OTCRFeatures = {
+    enableFeature = { 
+        101, -- g_game.enableFeature(GameItemShader)
+        102, -- g_game.enableFeature(GameCreatureAttachedEffect)
+        103, -- g_game.enableFeature(GameCreatureShader)
+        118  -- g_game.enableFeature(GameWingsAurasEffectsShader)
+    },
+    disableFeature = {
+    }
+}

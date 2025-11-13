@@ -18,6 +18,7 @@ local storeItemID = {
 	28544, -- training wand
 	28545, -- training club
 	44064, -- training shield
+	50292, -- training wraps
 
 	-- magic gold and magic converter (activated/deactivated)
 	28525, -- magic gold converter
@@ -175,7 +176,12 @@ local function useStaminaXpBoost(player)
 		end
 		_G.NextUseXpStamina[playerId] = currentTime + 60
 	end
+
 	player:setXpBoostTime(xpBoostMinutes * 60)
+
+	if xpBoostMinutes <= 0 then
+		player:setXpBoostPercent(0)
+	end
 end
 
 local function useConcoctionTime(player)
@@ -212,7 +218,7 @@ function Player:onLookInBattleList(creature, distance)
 	local description = "You see " .. creature:getDescription(distance)
 	if creature:isMonster() then
 		local master = creature:getMaster()
-		local summons = { "sorcerer familiar", "knight familiar", "druid familiar", "paladin familiar" }
+		local summons = { "sorcerer familiar", "knight familiar", "druid familiar", "paladin familiar", "monk familiar" }
 		if master and table.contains(summons, creature:getName():lower()) then
 			local familiarSummonTime = master:kv():get("familiar-summon-time") or 0
 			description = description .. " (Master: " .. master:getName() .. "). \z
@@ -367,53 +373,6 @@ function Player:onMoveItem(item, count, fromPosition, toPosition, fromCylinder, 
 		return false
 	end
 
-	return true
-end
-
-function Player:onItemMoved(item, count, fromPosition, toPosition, fromCylinder, toCylinder)
-	if IsRunningGlobalDatapack() then
-		-- The Secret Library Quest
-		if toPosition == Position(32460, 32928, 7) and item.itemid == 3578 then
-			toPosition:sendMagicEffect(CONST_ME_HEARTS)
-			self:say("You feed the turtle, now you may pass.", TALKTYPE_MONSTER_SAY)
-			Game.setStorageValue(Storage.Quest.U11_80.TheSecretLibrary.SmallIslands.Turtle, os.time() + 10 * 60)
-			item:remove(1)
-		end
-
-		-- Cults of Tibia begin
-		local frompos = Position(33023, 31904, 14)
-		local topos = Position(33052, 31932, 15)
-		local removeItem = false
-		if self:getPosition():isInRange(frompos, topos) and item:getId() == 23729 then
-			local tile = Tile(toPosition)
-			if tile then
-				local tileBoss = tile:getTopCreature()
-				if tileBoss and tileBoss:isMonster() then
-					if tileBoss:getName():lower() == "the remorseless corruptor" then
-						tileBoss:addHealth(-17000)
-						tileBoss:remove()
-						local monster = Game.createMonster("The Corruptor of Souls", toPosition)
-						if not monster then
-							return false
-						end
-						removeItem = true
-						monster:registerEvent("CheckTile")
-						if Game.getStorageValue("healthSoul") > 0 then
-							monster:addHealth(-(monster:getHealth() - Game.getStorageValue("healthSoul")))
-						end
-						Game.setStorageValue("CheckTile", os.time() + 30)
-					elseif tileBoss:getName():lower() == "the corruptor of souls" then
-						Game.setStorageValue("CheckTile", os.time() + 30)
-						removeItem = true
-					end
-				end
-			end
-			if removeItem then
-				item:remove(1)
-			end
-		end
-		-- Cults of Tibia end
-	end
 	return true
 end
 

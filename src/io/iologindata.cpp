@@ -175,6 +175,9 @@ bool IOLoginData::loadPlayer(const std::shared_ptr<Player> &player, const DBResu
 		// Load instant spells list
 		IOLoginDataLoad::loadPlayerInstantSpellList(player, result);
 
+		// load weapon proficiency
+		IOLoginDataLoad::loadPlayerWeaponProficiency(player, result);
+
 		if (disableIrrelevantInfo) {
 			return true;
 		}
@@ -284,6 +287,18 @@ bool IOLoginData::savePlayerGuard(const std::shared_ptr<Player> &player) {
 
 	if (!IOLoginDataSave::savePlayerStorage(player)) {
 		throw DatabaseException("[IOLoginDataSave::savePlayerStorage] - Failed to save player storage: " + player->getName());
+	}
+
+	if (player->isOutfitsModified()) {
+		if (!IOLoginDataSave::savePlayerOutfits(player)) {
+			throw DatabaseException("[IOLoginDataSave::savePlayerOutfits] - Failed to save player outfits: " + player->getName());
+		}
+	}
+
+	if (player->isMountsModified()) {
+		if (!IOLoginDataSave::savePlayerMounts(player)) {
+			throw DatabaseException("[IOLoginDataSave::savePlayerMounts] - Failed to save player mounts: " + player->getName());
+		}
 	}
 
 	return true;
@@ -411,7 +426,7 @@ std::vector<VIPGroupEntry> IOLoginData::getVIPGroupEntries(uint32_t accountId, u
 }
 
 void IOLoginData::addVIPGroupEntry(uint8_t groupId, uint32_t accountId, const std::string &groupName, bool customizable) {
-	std::string query = fmt::format("INSERT INTO `account_vipgroups` (`id`, `account_id`, `name`, `customizable`) VALUES ({}, {}, {}, {})", groupId, accountId, g_database().escapeString(groupName), customizable);
+	std::string query = fmt::format("INSERT INTO `account_vipgroups` (`account_id`, `name`, `customizable`) VALUES ({}, {}, {})", accountId, g_database().escapeString(groupName), customizable);
 	if (!g_database().executeQuery(query)) {
 		g_logger().error("Failed to add VIP Group entry for account {} and group {}. QUERY: {}", accountId, groupId, query.c_str());
 	}

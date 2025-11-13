@@ -167,7 +167,8 @@ const phmap::flat_hash_map<std::string, ItemParseAttributes_t> ItemParseAttribut
 	{ "usedbyhouseguests", ITEM_PARSE_USEDBYGUESTS },
 	{ "script", ITEM_PARSE_SCRIPT },
 	{ "augments", ITEM_PARSE_AUGMENT },
-	{ "preventloss", ITEM_PARSE_PREVENT_LOSS },
+	{ "elementalbond", ITEM_PARSE_ELEMENTALBOND },
+	{ "mantra", ITEM_PARSE_MANTRA },
 };
 
 const phmap::flat_hash_map<std::string, ItemTypes_t> ItemTypesMap = {
@@ -236,7 +237,8 @@ const phmap::flat_hash_map<std::string, WeaponType_t> WeaponTypesMap = {
 	{ "distance", WEAPON_DISTANCE },
 	{ "wand", WEAPON_WAND },
 	{ "ammunition", WEAPON_AMMO },
-	{ "missile", WEAPON_MISSILE }
+	{ "missile", WEAPON_MISSILE },
+	{ "fist", WEAPON_FIST }
 };
 
 const phmap::flat_hash_map<std::string, ImbuementTypes_t> ImbuementsTypeMap = {
@@ -258,6 +260,7 @@ const phmap::flat_hash_map<std::string, ImbuementTypes_t> ImbuementsTypeMap = {
 	{ "skillboost distance", IMBUEMENT_SKILLBOOST_DISTANCE },
 	{ "skillboost magic level", IMBUEMENT_SKILLBOOST_MAGIC_LEVEL },
 	{ "increase capacity", IMBUEMENT_INCREASE_CAPACITY },
+	{ "skillboost fist", IMBUEMENT_SKILLBOOST_FIST },
 	{ "paralysis removal", IMBUEMENT_PARALYSIS_REMOVAL },
 };
 
@@ -335,7 +338,8 @@ private:
 	static void parsePrimaryType(std::string_view stringValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
 	static void parseHouseRelated(std::string_view stringValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
 	static void parseUnscriptedItems(std::string_view stringValue, pugi::xml_node attributeNode, pugi::xml_attribute valueAttribute, ItemType &itemType);
-	static void parsePreventLoss(const std::string &stringValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
+	static void parseMantra(const std::string &stringValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
+	static void parseElementalBond(const std::string &stringValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
 
 private:
 	// Parent of the function: static void parseField

@@ -126,6 +126,10 @@ public:
 		setAttribute(ItemAttribute_t::DURATION, std::max<int32_t>(0, time));
 	}
 
+	void setDurationTimestamp(int64_t timestamp) {
+		setAttribute(ItemAttribute_t::DURATION_TIMESTAMP, timestamp);
+	}
+
 	void setDecaying(ItemDecayState_t decayState) {
 		setAttribute(ItemAttribute_t::DECAYSTATE, static_cast<int64_t>(decayState));
 		if (decayState == DECAYING_FALSE) {
@@ -148,6 +152,12 @@ public:
 	bool isRewardCorpse() const {
 		return getCorpseOwner() == static_cast<uint32_t>(std::numeric_limits<int32_t>::max());
 	}
+
+	void setShader(const std::string &shaderName);
+
+	bool hasShader() const;
+
+	std::string getShader() const;
 
 protected:
 	std::unique_ptr<ItemAttribute> &initAttributePtr() {
@@ -207,8 +217,10 @@ private:
 
 class Item : virtual public Thing, public ItemProperties, public SharedObject {
 public:
+	// Create a new item batch, it can use custom charges/count and wrappable
+	static std::shared_ptr<Item> createItemBatch(uint16_t itemId, uint32_t count, bool wrappable = false);
 	// Factory member to create item of right type based on type
-	static std::shared_ptr<Item> CreateItem(uint16_t type, uint16_t count = 0, Position* itemPosition = nullptr);
+	static std::shared_ptr<Item> CreateItem(uint16_t type, uint16_t count = 0, Position* itemPosition = nullptr, bool createWrappableItem = false, bool customCharges = false);
 	static std::shared_ptr<Container> CreateItemAsContainer(uint16_t type, uint16_t size);
 	static std::shared_ptr<Item> CreateItem(uint16_t itemId, Position &itemPosition);
 	static Items items;
@@ -465,7 +477,9 @@ public:
 		return items[id].stackable;
 	}
 	bool isStowable() const {
-		return hasMarketAttributes() && !getTier() && items[id].wareId > 0 && items[id].wareId == id;
+		const auto &itemType = items[id];
+		auto wareId = itemType.wareId;
+		return hasMarketAttributes() && !getTier() && wareId > 0 && !itemType.isContainer() && wareId == itemType.id;
 	}
 	bool isAlwaysOnTop() const {
 		return items[id].alwaysOnTopOrder != 0;
@@ -595,7 +609,7 @@ public:
 
 	void setDefaultSubtype();
 	uint16_t getSubType() const;
-	bool isItemStorable() const;
+	bool isItemStorable();
 	void setSubType(uint16_t n);
 	void addUniqueId(uint16_t uniqueId);
 
@@ -671,7 +685,7 @@ public:
 	 * @return false
 	 */
 	bool getImbuementInfo(uint8_t slot, ImbuementInfo* imbuementInfo) const;
-	bool addImbuement(uint8_t slot, uint16_t imbuementId, uint32_t duration);
+	bool canAddImbuement(uint8_t slot, const std::shared_ptr<Player> &player, const Imbuement* imbuement);
 	/**
 	 * @brief Decay imbuement time duration, only use this for decay the imbuement time
 	 *
@@ -685,6 +699,7 @@ public:
 	void clearImbuement(uint8_t slot, uint16_t imbuementId) {
 		return setImbuement(slot, imbuementId, 0);
 	}
+	void setImbuement(uint8_t slot, uint16_t imbuementId, uint32_t duration);
 	bool hasImbuementType(ImbuementTypes_t imbuementType, uint16_t imbuementTier) const {
 		const auto it = items[id].imbuementTypes.find(imbuementType);
 		if (it != items[id].imbuementTypes.end()) {
@@ -736,7 +751,6 @@ protected:
 	bool decayDisabled = false;
 
 private:
-	void setImbuement(uint8_t slot, uint16_t imbuementId, uint32_t duration);
 	// Don't add variables here, use the ItemAttribute class.
 	std::string getWeightDescription(uint32_t weight) const;
 

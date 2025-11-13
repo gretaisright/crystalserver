@@ -25,6 +25,10 @@
 #include "game/movement/position.hpp"
 #include "creatures/creatures_definitions.hpp"
 #include "creatures/players/animus_mastery/animus_mastery.hpp"
+#include "server/server_definitions.hpp"
+#include "creatures/players/proficiencies/proficiencies.hpp"
+#include "creatures/players/proficiencies/proficiencies_definitions.hpp"
+#include "creatures/players/attached_effects/player_attached_effects.hpp"
 
 class AnimusMastery;
 class House;
@@ -63,6 +67,10 @@ struct ModalWindow;
 struct Achievement;
 struct VIPGroup;
 struct Mount;
+struct Wing;
+struct Effect;
+struct Shader;
+struct Aura;
 struct OutfitEntry;
 struct Outfit;
 struct FamiliarEntry;
@@ -78,12 +86,15 @@ enum class HouseAuctionType : uint8_t;
 enum class BidErrorMessage : uint8_t;
 enum class TransferErrorMessage : uint8_t;
 enum class AcceptTransferErrorMessage : uint8_t;
+enum class ForgeClassifications_t : uint8_t;
+enum class BosstiaryRarity_t : uint8_t;
 enum ObjectCategory_t : uint8_t;
 enum PreySlot_t : uint8_t;
 enum SpeakClasses : uint8_t;
 enum ChannelEvent_t : uint8_t;
 enum SquareColor_t : uint8_t;
 enum Resource_t : uint8_t;
+enum VirtueMonk_t : uint8_t;
 
 using GuildWarVector = std::vector<uint32_t>;
 using StashContainerList = std::vector<std::pair<std::shared_ptr<Item>, uint32_t>>;
@@ -125,6 +136,88 @@ struct ForgeHistory {
 struct OpenContainer {
 	std::shared_ptr<Container> container;
 	uint16_t index;
+};
+
+struct WeaponProficiencyPerk {
+	uint8_t proficiencyLevel = 0;
+	uint8_t perkPosition = 0;
+};
+
+struct WeaponProficiencyData {
+	uint32_t experience = 0;
+	std::vector<WeaponProficiencyPerk> activePerks;
+};
+
+struct WeaponProficiencyAugment {
+	uint16_t spellId = 0;
+	WeaponProficiencyPerkAugmentType_t augmentType = PROFICIENCY_AUGMENTTYPE_NONE;
+	float value = 0;
+};
+
+struct EquippedWeaponProficiencyBonuses {
+	uint8_t attack = 0;
+	uint8_t defense = 0;
+	uint8_t weaponShieldMod = 0;
+	std::map<skills_t, uint8_t> skillBonus;
+	int32_t specialMagicLevel[COMBAT_COUNT] = { 0 };
+	std::vector<WeaponProficiencyAugment> spellAugments;
+	float bestiaryRacePercentDamageGain = 0;
+	float damageGainBossAndSinisterEmbraced = 0;
+	uint16_t critHitChance = 0;
+	int32_t critHitChanceForElementIdToSpellsAndRunes[COMBAT_COUNT] = { 0 };
+	uint16_t critHitChanceForOffensiveRunes = 0;
+	uint16_t critHitChanceForAutoAttack = 0;
+	uint16_t critExtraDamage = 0;
+	int32_t critExtraDamageForElementIdToSpellsAndRunes[COMBAT_COUNT] = { 0 };
+	uint16_t critExtraDamageForOffensiveRunes = 0;
+	uint16_t critExtraDamageForAutoAttack = 0;
+	uint16_t manaLeech = 0;
+	uint16_t lifeLeech = 0;
+	uint8_t manaGainOnHit = 0;
+	uint8_t lifeGainOnHit = 0;
+	uint8_t manaGainOnKill = 0;
+	uint8_t lifeGainOnKill = 0;
+	std::map<uint8_t, uint8_t> gainDamageAtRange;
+	float rangedHitChance = 0;
+	uint8_t attackRange = 0;
+	std::map<skills_t, float> skillPercentageAsExtraDamageForAutoAttack;
+	std::map<skills_t, float> skillPercentageAsExtraDamageForSpells;
+	std::map<skills_t, float> skillPercentageAsExtraHealingForSpells;
+
+	uint8_t bestiaryId = 0;
+
+	void reset() {
+		attack = 0;
+		defense = 0;
+		weaponShieldMod = 0;
+		skillBonus.clear();
+		std::fill(std::begin(specialMagicLevel), std::end(specialMagicLevel), 0);
+		spellAugments.clear();
+		bestiaryRacePercentDamageGain = 0;
+		damageGainBossAndSinisterEmbraced = 0;
+		critHitChance = 0;
+		std::fill(std::begin(critHitChanceForElementIdToSpellsAndRunes), std::end(critHitChanceForElementIdToSpellsAndRunes), 0);
+		critHitChanceForOffensiveRunes = 0;
+		critHitChanceForAutoAttack = 0;
+		critExtraDamage = 0;
+		std::fill(std::begin(critExtraDamageForElementIdToSpellsAndRunes), std::end(critExtraDamageForElementIdToSpellsAndRunes), 0);
+		critExtraDamageForOffensiveRunes = 0;
+		critExtraDamageForAutoAttack = 0;
+		manaLeech = 0;
+		lifeLeech = 0;
+		manaGainOnHit = 0;
+		lifeGainOnHit = 0;
+		manaGainOnKill = 0;
+		lifeGainOnKill = 0;
+		gainDamageAtRange.clear();
+		rangedHitChance = 0;
+		attackRange = 0;
+		skillPercentageAsExtraDamageForAutoAttack.clear();
+		skillPercentageAsExtraDamageForSpells.clear();
+		skillPercentageAsExtraHealingForSpells.clear();
+
+		bestiaryId = 0;
+	}
 };
 
 using MuteCountMap = std::map<uint32_t, uint32_t>;
@@ -201,23 +294,28 @@ public:
 		return CREATURETYPE_PLAYER;
 	}
 
-	uint8_t getLastMount() const;
-	uint8_t getCurrentMount() const;
-	void setCurrentMount(uint8_t mountId);
+	uint16_t getCurrentMount() const;
+	void setCurrentMount(uint16_t mountId);
 	bool isMounted() const {
 		return defaultOutfit.lookMount != 0;
 	}
 	bool toggleMount(bool mount);
-	bool tameMount(uint8_t mountId);
-	bool untameMount(uint8_t mountId);
+	bool tameMount(uint16_t mountId);
+	bool untameMount(uint16_t mountId);
 	bool hasMount(const std::shared_ptr<Mount> &mount) const;
 	bool hasAnyMount() const;
-	uint8_t getRandomMountId() const;
+	uint16_t getRandomMountId() const;
 	void dismount();
+
+	void setOutfitsModified(bool modified);
+	void setMountsModified(bool modified);
+	bool isOutfitsModified() const;
+	bool isMountsModified() const;
+
 	uint16_t getDodgeChance() const;
 
-	uint8_t isRandomMounted() const;
-	void setRandomMount(uint8_t isMountRandomized);
+	bool isRandomMounted() const;
+	void setRandomMount(bool randomizeMount);
 
 	void sendFYIBox(const std::string &message) const;
 
@@ -281,6 +379,9 @@ public:
 		return guildWarVector;
 	}
 
+	// Reload active wars from database into guildWarVector
+	void reloadGuildWarList();
+
 	const std::unordered_set<std::shared_ptr<MonsterType>> &getCyclopediaMonsterTrackerSet(bool isBoss) const;
 
 	void addMonsterToCyclopediaTrackerList(const std::shared_ptr<MonsterType> &mtype, bool isBoss, bool reloadClient = false);
@@ -307,6 +408,8 @@ public:
 	uint32_t getProtocolVersion() const;
 
 	bool hasSecureMode() const;
+
+	uint8_t getOpenedContainersLimit() const;
 
 	void setParty(std::shared_ptr<Party> newParty);
 	std::shared_ptr<Party> getParty() const;
@@ -632,6 +735,8 @@ public:
 	bool openShopWindow(const std::shared_ptr<Npc> &npc, const std::vector<ShopBlock> &shopItems = {});
 	bool closeShopWindow();
 	bool updateSaleShopList(const std::shared_ptr<Item> &item);
+	void updateSaleShopList();
+	void updateState();
 	bool hasShopItemForSale(uint16_t itemId, uint8_t subType) const;
 
 	void setChaseMode(bool mode);
@@ -650,8 +755,13 @@ public:
 	static bool lastHitIsPlayer(const std::shared_ptr<Creature> &lastHitCreature);
 
 	// stash functions
-	bool addItemFromStash(uint16_t itemId, uint32_t itemCount);
+	ReturnValue addItemFromStash(uint16_t itemId, uint32_t itemCount);
 	void stowItem(const std::shared_ptr<Item> &item, uint32_t count, bool allItems);
+
+	std::vector<std::shared_ptr<Container>> getAllContainers(bool onlyFromMainBackpack = true) const;
+	std::shared_ptr<Container> getBackpack() const;
+
+	ReturnValue removeItem(const std::shared_ptr<Item> &item, uint32_t count = 0);
 
 	void changeHealth(int32_t healthChange, bool sendHealthChange = true) override;
 	void changeMana(int32_t manaChange) override;
@@ -869,7 +979,6 @@ public:
 	void autoCloseContainers(const std::shared_ptr<Container> &container);
 
 	// inventory
-	// inventory
 	void onUpdateInventoryItem(const std::shared_ptr<Item> &oldItem, const std::shared_ptr<Item> &newItem);
 	void onRemoveInventoryItem(const std::shared_ptr<Item> &item);
 
@@ -939,11 +1048,25 @@ public:
 	void sendHouseAuctionMessage(uint32_t houseId, HouseAuctionType type, uint8_t index, bool bidSuccess = false) const;
 
 	// Imbuements
-	void onApplyImbuement(const Imbuement* imbuement, const std::shared_ptr<Item> &item, uint8_t slot, bool protectionCharm);
+	void onApplyImbuement(const Imbuement* imbuement, const std::shared_ptr<Item> &item, uint8_t slot);
 	void onClearImbuement(const std::shared_ptr<Item> &item, uint8_t slot);
-	void openImbuementWindow(const std::shared_ptr<Item> &item);
+	void openImbuementWindow(const Imbuement_Window_t type, const std::shared_ptr<Item> &item = nullptr) const;
 	void sendImbuementResult(const std::string &message) const;
 	void closeImbuementWindow() const;
+	void onApplyImbuementOnScroll(const Imbuement* imbuement);
+	void onClearAllImbuementsOnEtcher(const std::shared_ptr<Item> &item);
+	void applyImbuementScrollToItem(const uint16_t scrollId, const std::shared_ptr<Item> &item);
+
+	// Weapon Proficiency
+	EquippedWeaponProficiencyBonuses &getEquippedWeaponProficiency();
+	void sendWeaponProficiencyInfo(const uint16_t itemId) const;
+	void resetAllWeaponProficiencyPerks(const uint16_t itemId);
+	void applyEquippedWeaponProficiency(const uint16_t itemId);
+	void removeEquippedWeaponProficiency(const uint16_t itemId);
+	void sendWeaponProficiencyExperience(const uint16_t itemId, const uint32_t addProficiencyExperience);
+
+	std::unordered_map<uint16_t, WeaponProficiencyData> weaponProficiencies;
+
 	void sendPodiumWindow(const std::shared_ptr<Item> &podium, const Position &position, uint16_t itemId, uint8_t stackpos) const;
 	void sendCloseContainer(uint8_t cid) const;
 
@@ -1272,8 +1395,6 @@ public:
 
 	bool checkAutoLoot(bool isBoss) const;
 	bool checkChainSystem() const;
-	bool checkEmoteSpells() const;
-	bool checkSpellNameInsteadOfWords() const;
 	bool checkMute() const;
 
 	QuickLootFilter_t getQuickLootFilter() const;
@@ -1343,6 +1464,10 @@ public:
 	AnimusMastery &animusMastery();
 	const AnimusMastery &animusMastery() const;
 
+	// Player attached effects interface
+	PlayerAttachedEffects &attachedEffects();
+	const PlayerAttachedEffects &attachedEffects() const;
+
 	void sendLootMessage(const std::string &message) const;
 
 	std::shared_ptr<Container> getLootPouch();
@@ -1354,6 +1479,8 @@ public:
 	bool canSpeakWithHireling(uint8_t speechbubble);
 
 	uint16_t getPlayerVocationEnum() const;
+
+	void sendPlayerTyping(const std::shared_ptr<Creature> &creature, uint8_t typing) const;
 
 	void resetOldCharms();
 	bool isFirstOnStack() const;
@@ -1383,6 +1510,24 @@ public:
 	void removeDeflectCondition(const std::string_view &source, const ConditionType_t &conditionType, const uint8_t &chance);
 
 	void addDeflectCondition(std::string source, ConditionType_t conditionType, uint8_t chance);
+
+	// Monk udpate
+	void sendHarmonyProtocol() const;
+	uint8_t getHarmony() const;
+	void setHarmony(const uint8_t harmonyValue);
+	void addHarmony(const uint8_t harmonyValue);
+	void removeHarmony(const uint8_t harmonyValue);
+	void sendSereneProtocol() const;
+	bool isSerene() const;
+	void setSerene(const bool isSerene);
+	uint64_t getSereneCooldown();
+	void setSereneCooldown(const uint64_t addTime);
+	void sendVirtueProtocol() const;
+	void setVirtue(const VirtueMonk_t virtue);
+	VirtueMonk_t getVirtue() const;
+	uint16_t getMantraTotal() const;
+
+	std::unordered_map<uint16_t, uint8_t> spellActivedAimMap;
 
 private:
 	friend class PlayerLock;
@@ -1474,7 +1619,8 @@ private:
 
 	std::vector<uint16_t> quickLootListItemIds;
 
-	std::vector<OutfitEntry> outfits;
+	std::vector<OutfitEntry> outfitsMap;
+	std::unordered_set<uint16_t> mountsMap;
 	std::vector<FamiliarEntry> familiars;
 
 	std::vector<std::unique_ptr<PreySlot>> preys;
@@ -1591,7 +1737,8 @@ private:
 	uint32_t coinBalance = 0;
 	uint32_t coinTransferableBalance = 0;
 	uint16_t xpBoostTime = 0;
-	uint8_t randomMount = 0;
+
+	bool randomMount = false;
 
 	uint16_t lastStatsTrainingTime = 0;
 	uint16_t staminaMinutes = 2520;
@@ -1612,6 +1759,10 @@ private:
 
 	// Bestiary
 	bool charmExpansion = false;
+
+	// outfits and mounts
+	bool mountsModified = false;
+	bool outfitsModified = false;
 
 	std::array<CharmInfo, magic_enum::enum_count<charmRune_t>() + 1> charmsArray = {};
 	uint32_t charmPoints = 0;
@@ -1701,16 +1852,17 @@ private:
 	uint16_t getLookCorpse() const override;
 	void getPathSearchParams(const std::shared_ptr<Creature> &creature, FindPathParams &fpp) override;
 
-	void setDead(bool isDead) {
-		m_isDead = isDead;
-	}
-	bool isDead() const override {
-		return m_isDead;
-	}
+	void setDead(bool isDead);
+	bool isDead() const override;
 
 	void triggerMomentum();
 	void clearCooldowns();
-	void triggerTranscendance();
+	void triggerTranscendence();
+
+	uint8_t m_harmony = 0;
+	bool m_serene = false;
+	uint64_t m_serene_cooldown = 0;
+	VirtueMonk_t m_virtue = VIRTUE_NONE;
 
 	friend class Game;
 	friend class SaveManager;
@@ -1731,6 +1883,7 @@ private:
 	friend class PlayerCyclopedia;
 	friend class PlayerTitle;
 	friend class PlayerVIP;
+	friend class PlayerAttachedEffects;
 
 	std::unique_ptr<PlayerWheel> m_wheelPlayer;
 	std::unique_ptr<PlayerAchievement> m_playerAchievement;
@@ -1739,6 +1892,7 @@ private:
 	std::unique_ptr<PlayerTitle> m_playerTitle;
 	std::unique_ptr<PlayerVIP> m_playerVIP;
 	AnimusMastery m_animusMastery;
+	PlayerAttachedEffects m_playerAttachedEffects;
 
 	std::mutex quickLootMutex;
 
@@ -1776,4 +1930,9 @@ private:
 	// unequipping the armor does not influence the boot's imbuement.
 	// When present simultaneously, the one with the greatest chance of occurrence will prevail.
 	std::vector<DeflectCondition> deflectConditions;
+
+	int16_t getMantraAbsorbPercent(int16_t mantraAbsorbValue) const;
+
+	void addWeaponProficiencyExperience(const std::shared_ptr<MonsterType> &mType, const ForgeClassifications_t classification, const bool bossSoulpit);
+	EquippedWeaponProficiencyBonuses equippedWeaponProficiency;
 };

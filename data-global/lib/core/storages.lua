@@ -81,8 +81,6 @@ Storage = {
 	EdronRopeQuest = 30004,
 	OrcKingGreeting = 30006,
 	MarkwinGreeting = 30007,
-	-- EmoteSpells Storage cannot be changed, it is set in source code
-	EmoteSpells = 30008,
 	WagonTicket = 30009,
 	FirstMageWeapon = 30011,
 	KawillBlessing = 30014,
@@ -301,6 +299,10 @@ Storage = {
 		MessageStair = 52277,
 		Lever = 52278,
 		Mainland = 52279,
+		Monk = 52280,
+		MonkHealthPotion = 52281,
+		MonkManaPotion = 52282,
+		MonkMeat = 52283,
 	},
 	GraveDanger = {
 		-- Reserved storage from 52310 - 52339
@@ -2862,6 +2864,42 @@ Storage = {
 				ForgeMaster = {
 					AccessDoor = 47975,
 				},
+			},
+		},
+		U15_00 = {
+			TheWayOfTheMonk = {
+				Questline = 290100,
+				Questlog = 290101,
+				ShrineCounter = 290500,
+				Shrines = {
+					FirstShrine = 290126,
+					SecondShrine = 290226,
+					ThirdShrine = 290326,
+					FourthShrine = 290426,
+				},
+				MainShrines = {
+					Guidance = 290127,
+					Tranquility = 290128,
+					Respect = 290129,
+					Legacy = 290130,
+					Empathy = 290131,
+					Harmony = 290132,
+					Power = 290133,
+					Knowledge = 290134,
+					Serenity = 290135,
+					Eternity = 290136,
+				},
+			},
+		},
+		U15_10 = { -- update 15.10 - Reserved Storages 48000 - 48030
+			BloodyTusks = {
+				Questline = 48000,
+				IntoTheGrave = 48001,
+				ThroughTheMist = 48002,
+				TheWrathOfTheAncestorst = 48003,
+				DanceOfDeath = 48004,
+				TheNextStep = 48005,
+				Bloodbath = 48006,
 			},
 		},
 	},

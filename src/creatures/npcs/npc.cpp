@@ -443,48 +443,140 @@ void Npc::onPlayerSellAllLoot(uint32_t playerId, uint16_t itemId, bool ignore, u
 	if (!player) {
 		return;
 	}
+
 	if (itemId == ITEM_GOLD_POUCH) {
+		const auto &owner = player->getShopOwner();
+		if (!owner || owner.get() != this) {
+			return;
+		}
+
 		const auto &container = player->getLootPouch();
 		if (!container) {
 			return;
 		}
-		bool hasMore = false;
-		uint64_t toSellCount = 0;
-		phmap::flat_hash_map<uint16_t, uint16_t> toSell;
+
+		const auto preSize = container->size();
+		const uint64_t preTotal = totalPrice;
+
+		bool hasSellable = false;
+		const auto &shopVector = getShopItemVector(player->getGUID());
 		for (ContainerIterator it = container->iterator(); it.hasNext(); it.advance()) {
-			if (toSellCount >= 500) {
-				hasMore = true;
-				break;
-			}
 			const auto &item = *it;
 			if (!item) {
 				continue;
 			}
+			uint32_t sellPriceCandidate = 0;
+			const ItemType &itemType = Item::items[item->getID()];
+			for (const ShopBlock &shopBlock : shopVector) {
+				if (itemType.id == shopBlock.itemId && shopBlock.itemSellPrice != 0) {
+					sellPriceCandidate = shopBlock.itemSellPrice;
+					break;
+				}
+			}
+			if (sellPriceCandidate == 0) {
+				continue;
+			}
+			if (item->getTier() > 0 || item->hasImbuements()) {
+				continue;
+			}
+			if (const auto &child = item->getContainer()) {
+				if (child->size() > 0) {
+					continue;
+				}
+			}
+			if (!item->hasMarketAttributes()) {
+				continue;
+			}
+			hasSellable = true;
+			break;
+		}
+
+		phmap::flat_hash_map<uint16_t, uint16_t> toSell;
+		uint32_t MAX_BATCH_SIZE = 10;
+		uint32_t processedCount = 0;
+		bool hasMore = false;
+
+		for (ContainerIterator it = container->iterator(); it.hasNext() && !hasMore; it.advance()) {
+			const auto &item = *it;
+			if (!item) {
+				continue;
+			}
+
 			toSell[item->getID()] += item->getItemAmount();
 			if (item->isStackable()) {
-				toSellCount++;
+				MAX_BATCH_SIZE = 100;
+				processedCount++;
 			} else {
-				toSellCount += item->getItemAmount();
+				MAX_BATCH_SIZE = 10;
+				processedCount += item->getItemAmount();
+			}
+
+			if (processedCount >= MAX_BATCH_SIZE) {
+				hasMore = true;
+				break;
 			}
 		}
+
 		for (const auto &[m_itemId, amount] : toSell) {
 			onPlayerSellItem(player, m_itemId, 0, amount, ignore, totalPrice, container);
 		}
-		auto ss = std::stringstream();
-		if (totalPrice == 0) {
-			ss << "You have no items in your loot pouch.";
-			player->sendTextMessage(MESSAGE_FAILURE, ss.str());
-			return;
-		}
-		if (hasMore) {
+
+		const auto postSize = container->size();
+		const bool priceChanged = (totalPrice > preTotal);
+		const bool sizeChanged = (postSize != preSize);
+		const bool madeProgress = priceChanged || sizeChanged;
+
+		if (hasMore && madeProgress) {
 			g_dispatcher().scheduleEvent(
-				SCHEDULER_MINTICKS, [this, playerId = player->getID(), itemId, ignore, totalPrice] { onPlayerSellAllLoot(playerId, itemId, ignore, totalPrice); }, __FUNCTION__
+				NPC_SELL_TICKS,
+				[this, playerId = player->getID(), itemId, ignore, totalPrice]() {
+					const auto &seller = g_game().getPlayerByID(playerId);
+					if (!seller) {
+						return;
+					}
+
+					const auto &owner = seller->getShopOwner();
+					if (!owner || owner.get() != this) {
+						return;
+					}
+					onPlayerSellAllLoot(playerId, itemId, ignore, totalPrice);
+				},
+				__FUNCTION__
 			);
 			return;
 		}
-		ss << "You sold all of the items from your loot pouch for ";
-		ss << totalPrice << " gold.";
-		player->sendTextMessage(MESSAGE_LOOK, ss.str());
+
+		auto ss = std::stringstream();
+		if (!madeProgress) {
+			if (totalPrice == 0) {
+				if (preSize == 0) {
+					ss << "You have no items in your loot pouch.";
+					player->sendTextMessage(MESSAGE_FAILURE, ss.str());
+				} else if (!hasSellable) {
+					ss << "You have no sellable items in your loot pouch.";
+					player->sendTextMessage(MESSAGE_FAILURE, ss.str());
+				} else {
+					ss << "You don't have enough space. Free up space in your bag.";
+					player->sendTextMessage(MESSAGE_FAILURE, ss.str());
+				}
+			} else {
+				ss << "Sale stopped. Some items in your loot bag could not be sold. Make sure you have enough space in your bag.";
+				player->sendTextMessage(MESSAGE_ADMINISTRATOR, ss.str());
+				ss.str("");
+				ss.clear();
+				ss << "You sold all of the items from your loot pouch for " << totalPrice << " gold.";
+				player->sendTextMessage(MESSAGE_LOOK, ss.str());
+			}
+		} else {
+			if (totalPrice == 0) {
+				ss << "You have no items in your loot pouch.";
+				player->sendTextMessage(MESSAGE_FAILURE, ss.str());
+			} else {
+				ss << "You sold all of the items from your loot pouch for " << totalPrice << " gold.";
+				player->sendTextMessage(MESSAGE_LOOK, ss.str());
+			}
+		}
+
 		player->openPlayerContainers();
 	}
 }
@@ -510,6 +602,61 @@ void Npc::onPlayerSellItem(const std::shared_ptr<Player> &player, uint16_t itemI
 	}
 	if (sellPrice == 0) {
 		return;
+	}
+
+	// Pre-check: compute how many items can be sold in this call (eligible) without removing yet
+	uint32_t eligibleCount = 0;
+	for (const auto &item : player->getInventoryItemsFromId(itemId, ignore)) {
+		if (!item || item->getTier() > 0 || item->hasImbuements()) {
+			continue;
+		}
+		if (const auto &container = item->getContainer()) {
+			if (container->size() > 0) {
+				continue;
+			}
+		}
+		if (parent && item->getParent() != parent) {
+			continue;
+		}
+		if (!item->hasMarketAttributes()) {
+			continue;
+		}
+		eligibleCount += item->getItemCount();
+		if (eligibleCount >= amount) {
+			break;
+		}
+	}
+
+	const uint32_t willRemove = std::min<uint32_t>(amount, eligibleCount);
+	if (willRemove == 0) {
+		return;
+	}
+
+	// Capacity and backpack space check for gold payouts (when not using autobank)
+	if (getCurrency() == ITEM_GOLD_COIN && !g_configManager().getBoolean(AUTOBANK)) {
+		const uint64_t prospectiveTotal = static_cast<uint64_t>(sellPrice) * static_cast<uint64_t>(willRemove);
+		uint32_t crystalCoins = static_cast<uint32_t>(prospectiveTotal / 10000);
+		uint32_t remainder = static_cast<uint32_t>(prospectiveTotal % 10000);
+		uint32_t platinumCoins = remainder / 100;
+		uint32_t goldCoins = remainder % 100;
+
+		// Number of stacks that will be created (each stack up to 100)
+		auto stacksNeeded = static_cast<uint16_t>((crystalCoins + 99) / 100 + (platinumCoins + 99) / 100 + (goldCoins + 99) / 100);
+		const uint16_t freeSlots = player->getFreeBackpackSlots();
+		if (stacksNeeded > 0 && freeSlots < stacksNeeded) {
+			player->sendCancelMessage(RETURNVALUE_NOTENOUGHROOM);
+			return;
+		}
+
+		// Capacity check (approximate by coin unit weights)
+		const uint32_t goldWeight = Item::items[ITEM_GOLD_COIN].weight;
+		const uint32_t platWeight = Item::items[ITEM_PLATINUM_COIN].weight;
+		const uint32_t crysWeight = Item::items[ITEM_CRYSTAL_COIN].weight;
+		const uint64_t totalWeight = static_cast<uint64_t>(goldCoins) * goldWeight + static_cast<uint64_t>(platinumCoins) * platWeight + static_cast<uint64_t>(crystalCoins) * crysWeight;
+		if (player->getFreeCapacity() < totalWeight) {
+			player->sendCancelMessage(RETURNVALUE_NOTENOUGHCAPACITY);
+			return;
+		}
 	}
 
 	auto toRemove = amount;
@@ -785,20 +932,29 @@ bool Npc::getNextStep(Direction &nextDirection, uint32_t &flags) {
 }
 
 bool Npc::getRandomStep(Direction &moveDirection) {
-	static std::vector<Direction> directionvector {
-		Direction::DIRECTION_NORTH,
-		Direction::DIRECTION_WEST,
-		Direction::DIRECTION_EAST,
-		Direction::DIRECTION_SOUTH
-	};
-	std::ranges::shuffle(directionvector, getRandomGenerator());
+	std::array<Direction, 4> dirList;
+	size_t directions = static_cast<size_t>(-1);
 
-	for (const Position &creaturePos = getPosition();
-	     const Direction &direction : directionvector) {
-		if (canWalkTo(creaturePos, direction)) {
-			moveDirection = direction;
-			return true;
-		}
+	const Position &creaturePos = getPosition();
+	if (canWalkTo(creaturePos, Direction::DIRECTION_NORTH)) {
+		dirList[++directions] = Direction::DIRECTION_NORTH;
+	}
+
+	if (canWalkTo(creaturePos, Direction::DIRECTION_SOUTH)) {
+		dirList[++directions] = Direction::DIRECTION_SOUTH;
+	}
+
+	if (canWalkTo(creaturePos, Direction::DIRECTION_EAST)) {
+		dirList[++directions] = Direction::DIRECTION_EAST;
+	}
+
+	if (canWalkTo(creaturePos, Direction::DIRECTION_WEST)) {
+		dirList[++directions] = Direction::DIRECTION_WEST;
+	}
+
+	if (directions <= 4) {
+		moveDirection = dirList[uniform_random(0, directions)];
+		return true;
 	}
 	return false;
 }
@@ -825,7 +981,10 @@ void Npc::closeAllShopWindows() {
 		if (player) {
 			player->closeShopWindow();
 		}
-		it = shopPlayers.erase(it);
+	}
+
+	if (!shopPlayers.empty()) {
+		shopPlayers.clear();
 	}
 }
 
