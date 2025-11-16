@@ -128,7 +128,7 @@ mType.onThink = function(monster, interval)
         monster:setStorageValue(GrandMasterOberonConfig.Storage.Life, 0)
     end
     
-    -- Check if we should trigger the question phase
+    -- Check if we should trigger the question phase 
     local currentLifeStorage = monster:getStorageValue(GrandMasterOberonConfig.Storage.Life)
     if currentLifeStorage < GrandMasterOberonConfig.AmountLife then
         local percentageHealth = (monster:getHealth() * 100) / monster:getMaxHealth()
