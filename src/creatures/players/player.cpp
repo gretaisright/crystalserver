@@ -51,6 +51,7 @@
 #include "game/game.hpp"
 #include "game/modal_window/modal_window.hpp"
 #include "game/scheduling/dispatcher.hpp"
+#include "game/scheduling/events_scheduler.hpp"
 #include "game/scheduling/save_manager.hpp"
 #include "game/scheduling/task.hpp"
 #include "grouping/familiars.hpp"
@@ -78,6 +79,8 @@
 #include "creatures/players/wheel/wheel_definitions.hpp"
 #include "creatures/players/proficiencies/proficiencies.hpp"
 #include "creatures/players/proficiencies/proficiencies_definitions.hpp"
+#include "creatures/combat/spells.hpp"
+#include "utils/definitions.hpp"
 
 MuteCountMap Player::muteCountMap;
 
@@ -1115,11 +1118,7 @@ void Player::addSkillAdvance(skills_t skill, uint64_t count) {
 		std::ostringstream ss;
 		ss << "You advanced to " << getSkillName(skill) << " level " << skills[skill].level << '.';
 		sendTextMessage(MESSAGE_EVENT_ADVANCE, ss.str());
-		if (skill == SKILL_LEVEL) {
-			sendTakeScreenshot(SCREENSHOT_TYPE_LEVELUP);
-		} else {
-			sendTakeScreenshot(SCREENSHOT_TYPE_SKILLUP);
-		}
+		sendSkillAdvance(skill, skills[skill].level);
 
 		g_creatureEvents().playerAdvance(static_self_cast<Player>(), skill, (skills[skill].level - 1), skills[skill].level);
 
@@ -1136,7 +1135,7 @@ void Player::addSkillAdvance(skills_t skill, uint64_t count) {
 
 	double_t newPercent;
 	if (nextReqTries > currReqTries) {
-		newPercent = Player::getPercentLevel(skills[skill].tries, nextReqTries);
+		newPercent = Player::calculateLevelProgress(skills[skill].tries, nextReqTries);
 	} else {
 		newPercent = 0;
 	}
@@ -2688,7 +2687,7 @@ void Player::openImbuementWindow(const Imbuement_Window_t type, const std::share
 		}
 	}
 
-	client->openImbuementWindow(type, item);
+	client->sendOpenImbuementWindow(type, item);
 }
 
 void Player::onApplyImbuementOnScroll(const Imbuement* imbuement) {
@@ -3527,10 +3526,8 @@ void Player::addManaSpent(uint64_t amount) {
 		std::ostringstream ss;
 		ss << "You advanced to magic level " << magLevel << '.';
 		sendTextMessage(MESSAGE_EVENT_ADVANCE, ss.str());
-		sendTakeScreenshot(SCREENSHOT_TYPE_SKILLUP);
-
 		g_creatureEvents().playerAdvance(static_self_cast<Player>(), SKILL_MAGLEVEL, magLevel - 1, magLevel);
-		sendTakeScreenshot(SCREENSHOT_TYPE_SKILLUP);
+		sendSkillAdvance(SKILL_MAGLEVEL, magLevel);
 
 		sendUpdateStats = true;
 		currReqMana = nextReqMana;
@@ -3544,7 +3541,7 @@ void Player::addManaSpent(uint64_t amount) {
 
 	const uint8_t oldPercent = magLevelPercent;
 	if (nextReqMana > currReqMana) {
-		magLevelPercent = Player::getPercentLevel(manaSpent, nextReqMana);
+		magLevelPercent = Player::calculateLevelProgress(manaSpent, nextReqMana);
 	} else {
 		magLevelPercent = 0;
 	}
@@ -3565,7 +3562,7 @@ void Player::addExperience(const std::shared_ptr<Creature> &target, uint64_t exp
 	uint64_t rawExp = exp;
 	if (currLevelExp >= nextLevelExp) {
 		// player has reached max level
-		levelPercent = 0;
+		levelProgress = 0;
 		sendStats();
 		return;
 	}
@@ -3678,13 +3675,13 @@ void Player::addExperience(const std::shared_ptr<Creature> &target, uint64_t exp
 		std::ostringstream ss;
 		ss << "You advanced from Level " << prevLevel << " to Level " << level << '.';
 		sendTextMessage(MESSAGE_EVENT_ADVANCE, ss.str());
-		sendTakeScreenshot(SCREENSHOT_TYPE_LEVELUP);
+		sendSkillAdvance(SKILL_LEVEL, level);
 	}
 
 	if (nextLevelExp > currLevelExp) {
-		levelPercent = Player::getPercentLevel(experience - currLevelExp, nextLevelExp - currLevelExp);
+		levelProgress = Player::calculateLevelProgress(experience - currLevelExp, nextLevelExp - currLevelExp);
 	} else {
-		levelPercent = 0;
+		levelProgress = 0;
 	}
 	sendStats();
 	sendExperienceTracker(rawExp, exp);
@@ -3767,24 +3764,25 @@ void Player::removeExperience(uint64_t exp, bool sendText /* = false*/) {
 
 	const uint64_t nextLevelExp = Player::getExpForLevel(level + 1);
 	if (nextLevelExp > currLevelExp) {
-		levelPercent = Player::getPercentLevel(experience - currLevelExp, nextLevelExp - currLevelExp);
+		levelProgress = Player::calculateLevelProgress(experience - currLevelExp, nextLevelExp - currLevelExp);
 	} else {
-		levelPercent = 0;
+		levelProgress = 0;
 	}
 	sendStats();
 	sendExperienceTracker(0, -static_cast<int64_t>(exp));
 }
 
-double_t Player::getPercentLevel(uint64_t count, uint64_t nextLevelCount) {
+uint16_t Player::calculateLevelProgress(uint64_t count, uint64_t nextLevelCount) {
 	if (nextLevelCount == 0) {
 		return 0;
 	}
 
-	const double_t result = round(((count * 100.) / nextLevelCount) * 100.) / 100.;
-	if (result > 100) {
-		return 0;
+	uint64_t result = (count * 10000) / nextLevelCount;
+	if (result > 10000) {
+		result = 10000;
 	}
-	return result;
+
+	return static_cast<uint16_t>(result);
 }
 
 void Player::onBlockHit() {
@@ -4069,7 +4067,7 @@ void Player::death(const std::shared_ptr<Creature> &lastHitCreature) {
 
 		uint64_t nextReqMana = vocation->getReqMana(magLevel + 1);
 		if (nextReqMana > vocation->getReqMana(magLevel)) {
-			magLevelPercent = Player::getPercentLevel(manaSpent, nextReqMana);
+			magLevelPercent = Player::calculateLevelProgress(manaSpent, nextReqMana);
 		} else {
 			magLevelPercent = 0;
 		}
@@ -4120,7 +4118,7 @@ void Player::death(const std::shared_ptr<Creature> &lastHitCreature) {
 			}
 
 			skills[i].tries = std::max<int32_t>(0, skills[i].tries - lostSkillTries);
-			skills[i].percent = Player::getPercentLevel(skills[i].tries, vocation->getReqSkillTries(i, skills[i].level));
+			skills[i].percent = Player::calculateLevelProgress(skills[i].tries, vocation->getReqSkillTries(i, skills[i].level));
 		}
 
 		sendTextMessage(MESSAGE_EVENT_ADVANCE, lostExp.str());
@@ -4156,9 +4154,9 @@ void Player::death(const std::shared_ptr<Creature> &lastHitCreature) {
 			uint64_t currLevelExp = Player::getExpForLevel(level);
 			uint64_t nextLevelExp = Player::getExpForLevel(level + 1);
 			if (nextLevelExp > currLevelExp) {
-				levelPercent = Player::getPercentLevel(experience - currLevelExp, nextLevelExp - currLevelExp);
+				levelProgress = Player::calculateLevelProgress(experience - currLevelExp, nextLevelExp - currLevelExp);
 			} else {
-				levelPercent = 0;
+				levelProgress = 0;
 			}
 		}
 
@@ -4282,7 +4280,7 @@ void Player::sendToRook() {
 			staminaMinutes = 2520;
 			offlineTrainingTime = 43200;
 			health = healthMax = 150;
-			experience = levelPercent = magLevel = magLevelPercent = manaSpent = mana = manaMax = bankBalance = 0;
+			experience = levelProgress = magLevel = magLevelPercent = manaSpent = mana = manaMax = bankBalance = 0;
 
 			// default outfit (citizen)
 			defaultOutfit.lookType = (getSex() == 0) ? 136 : 128;
@@ -4354,7 +4352,7 @@ void Player::sendToRook() {
 			for (uint32_t i = SKILL_FIRST; i <= SKILL_LAST; ++i) {
 				skills[i].level = 10;
 				skills[i].tries = 0;
-				skills[i].percent = Player::getPercentLevel(0, rookVocation->getReqSkillTries(i, 10));
+				skills[i].percent = Player::calculateLevelProgress(0, rookVocation->getReqSkillTries(i, 10));
 			}
 
 			// Remove items from inventory
@@ -6801,7 +6799,7 @@ bool Player::canWearOutfit(uint16_t lookType, uint8_t addons) const {
 		return true;
 	}
 
-	const auto &outfit = Outfits::getInstance().getOutfitByLookType(getPlayer(), lookType);
+	const auto &outfit = Outfits::getInstance().getOutfitByLookType(getSex(), lookType);
 	if (!outfit) {
 		return false;
 	}
@@ -6908,6 +6906,12 @@ void Player::addOutfit(uint16_t lookType, uint8_t addons) {
 
 	setOutfitsModified(true);
 	outfitsMap.emplace_back(lookType, addons);
+
+	const auto ptr = shared_from_this();
+	auto outfit = g_game().outfits.getOutfitByLookType(getSex(), lookType);
+	if (outfit) {
+		sendUnlockedSkin(outfit->name, lookType, std::clamp<uint8_t>(addons, 0, 2));
+	}
 }
 
 bool Player::removeOutfit(uint16_t lookType) {
@@ -7307,7 +7311,7 @@ uint32_t Player::getAttackSpeed() const {
 	}
 
 	if (outfitAttributes) {
-		const auto &outfit = Outfits::getInstance().getOutfitByLookType(getPlayer(), defaultOutfit.lookType);
+		const auto &outfit = Outfits::getInstance().getOutfitByLookType(getSex(), defaultOutfit.lookType);
 		if (outfit) {
 			if (outfit->attackSpeed > 0) {
 				if (outfit->attackSpeed >= vocation->getAttackSpeed()) {
@@ -7360,7 +7364,7 @@ double Player::getLostPercent() const {
 
 	double lossPercent;
 	if (level >= 24) {
-		const double tmpLevel = level + (levelPercent / 100.);
+		const double tmpLevel = level + (levelProgress / 100.);
 		lossPercent = ((tmpLevel + 50) * 50 * ((tmpLevel * tmpLevel) - (5 * tmpLevel) + 8)) / experience;
 	} else {
 		percentReduction = (percentReduction >= 0.40 ? 0.50 : percentReduction);
@@ -7979,7 +7983,7 @@ bool Player::toggleMount(bool mount) {
 			return false;
 		}
 
-		const auto &playerOutfit = Outfits::getInstance().getOutfitByLookType(getPlayer(), defaultOutfit.lookType);
+		const auto &playerOutfit = Outfits::getInstance().getOutfitByLookType(getSex(), defaultOutfit.lookType);
 		if (!playerOutfit) {
 			return false;
 		}
@@ -8155,12 +8159,12 @@ bool Player::addOfflineTrainingTries(skills_t skill, uint64_t tries) {
 			std::ostringstream ss;
 			ss << "You advanced to magic level " << magLevel << '.';
 			sendTextMessage(MESSAGE_EVENT_ADVANCE, ss.str());
-			sendTakeScreenshot(SCREENSHOT_TYPE_SKILLUP);
+			sendSkillAdvance(SKILL_MAGLEVEL, magLevel);
 		}
 
 		uint8_t newPercent;
 		if (nextReqMana > currReqMana) {
-			newPercent = Player::getPercentLevel(manaSpent, nextReqMana);
+			newPercent = Player::calculateLevelProgress(manaSpent, nextReqMana);
 			newPercentToNextLevel = static_cast<long double>(manaSpent * 100) / nextReqMana;
 		} else {
 			newPercent = 0;
@@ -8212,16 +8216,12 @@ bool Player::addOfflineTrainingTries(skills_t skill, uint64_t tries) {
 			std::ostringstream ss;
 			ss << "You advanced to " << getSkillName(skill) << " level " << skills[skill].level << '.';
 			sendTextMessage(MESSAGE_EVENT_ADVANCE, ss.str());
-			if (skill == SKILL_LEVEL) {
-				sendTakeScreenshot(SCREENSHOT_TYPE_LEVELUP);
-			} else {
-				sendTakeScreenshot(SCREENSHOT_TYPE_SKILLUP);
-			}
+			sendSkillAdvance(skill, skills[skill].level);
 		}
 
 		uint8_t newPercent;
 		if (nextReqTries > currReqTries) {
-			newPercent = Player::getPercentLevel(skills[skill].tries, nextReqTries);
+			newPercent = Player::calculateLevelProgress(skills[skill].tries, nextReqTries);
 			newPercentToNextLevel = static_cast<long double>(skills[skill].tries * 100) / nextReqTries;
 		} else {
 			newPercent = 0;
@@ -8527,9 +8527,51 @@ void Player::sendOpenStash(bool isNpc) const {
 	}
 }
 
-void Player::sendTakeScreenshot(Screenshot_t screenshotType) const {
+void Player::sendClientEvent(ClientEvent_t eventType) const {
 	if (client) {
-		client->sendTakeScreenshot(screenshotType);
+		client->sendClientEvent(eventType);
+	}
+}
+
+void Player::sendUnlockedAchievement(const std::string &achievement) const {
+	if (client) {
+		client->sendUnlockedAchievement(achievement);
+	}
+}
+
+void Player::sendUnlockedTitle(const std::string &title) const {
+	if (client) {
+		client->sendUnlockedTitle(title);
+	}
+}
+
+void Player::sendUnlockedSkin(const std::string &skinName, uint16_t lookType, uint8_t skinType) const {
+	if (client) {
+		client->sendUnlockedSkin(skinName, lookType, skinType);
+	}
+}
+
+void Player::sendSkillAdvance(skills_t skill, uint16_t newLevel) const {
+	if (client) {
+		client->sendSkillAdvance(skill, newLevel);
+	}
+}
+
+void Player::sendProgressRace(uint16_t raceId, uint8_t progressLevel, bool isBoss) const {
+	if (client) {
+		client->sendProgressRace(raceId, progressLevel, isBoss);
+	}
+}
+
+void Player::sendProgressQuest(const std::string &questName, bool isCompleted) const {
+	if (client) {
+			client->sendProgressQuest(questName, isCompleted);
+	}
+}
+	
+void Player::sendProficiencyProgress(uint16_t itemId, const std::string &message) const {
+	if (client) {
+		client->sendProficiencyProgress(itemId, message);
 	}
 }
 
@@ -8869,6 +8911,12 @@ void Player::sendSpellCooldown(uint16_t spellId, uint32_t time) const {
 void Player::sendSpellGroupCooldown(SpellGroup_t groupId, uint32_t time) const {
 	if (client) {
 		client->sendSpellGroupCooldown(groupId, time);
+	}
+}
+
+void Player::sendPassiveCooldown(uint8_t passiveId, uint32_t currentCooldown, uint32_t maxCooldown, bool paused) const {
+	if (client) {
+		client->sendPassiveCooldown(passiveId, currentCooldown, maxCooldown, paused);
 	}
 }
 
@@ -11212,7 +11260,7 @@ void Player::onCreatureAppear(const std::shared_ptr<Creature> &creature, bool is
 	if (isLogin && creature == getPlayer()) {
 		onEquipInventory();
 
-		const auto &outfit = Outfits::getInstance().getOutfitByLookType(getPlayer(), defaultOutfit.lookType);
+		const auto &outfit = Outfits::getInstance().getOutfitByLookType(getSex(), defaultOutfit.lookType);
 		if (outfit) {
 			if (defaultOutfit.lookAddons == 3) {
 				outfitAttributes = Outfits::getInstance().addAttributes(getID(), defaultOutfit.lookType, getSex(), defaultOutfit.lookAddons);
@@ -11542,7 +11590,7 @@ uint64_t Player::getItemCustomPrice(uint16_t itemId, bool buyPrice) const {
 	return g_game().getItemMarketPrice(itemMap, buyPrice);
 }
 
-uint16_t Player::getFreeBackpackSlots() const {
+uint32_t Player::getFreeBackpackSlots() const {
 	const auto &thing = getThing(CONST_SLOT_BACKPACK);
 	if (!thing) {
 		return 0;
@@ -11553,7 +11601,7 @@ uint16_t Player::getFreeBackpackSlots() const {
 		return 0;
 	}
 
-	const uint16_t counter = std::max<uint16_t>(0, backpack->getFreeSlots());
+	const auto counter = std::max<uint32_t>(0, backpack->getFreeSlots());
 
 	return counter;
 }
@@ -11706,6 +11754,12 @@ void Player::sendBosstiaryEntryChanged(uint32_t bossid) const {
 void Player::sendInventoryImbuements(const std::map<Slots_t, std::shared_ptr<Item>> &items) const {
 	if (client) {
 		client->sendInventoryImbuements(items);
+	}
+}
+
+void Player::sendNpcChatWindow() const {
+	if (client) {
+		client->sendNpcChatWindow();
 	}
 }
 
@@ -11893,9 +11947,9 @@ void Player::sendFYIBox(const std::string &message) const {
 	}
 }
 
-void Player::parseBestiarySendRaces() const {
+void Player::sendBestiaryRaces() const {
 	if (client) {
-		client->parseBestiarySendRaces();
+		client->sendBestiaryRaces();
 	}
 }
 
@@ -12708,4 +12762,19 @@ void Player::removeEquippedWeaponProficiency(const uint16_t itemId) {
 
 	sendStats();
 	sendSkills();
+}
+
+void Player::addNpcFocus(const uint32_t npcId, const uint16_t buttonFlags) {
+	focusedNpcs[npcId] = buttonFlags;
+
+	// update ui with new npc
+	sendNpcChatWindow();
+}
+
+void Player::removeNpcFocus(const uint32_t npcId) {
+	// clear from the map
+	focusedNpcs.erase(npcId);
+
+	// update ui
+	sendNpcChatWindow();
 }
